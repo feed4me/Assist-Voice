@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The picker's title, as the RecyclerView's own first item instead of a
+     separate TextView above it. Needed so pickerRecycler itself stays the
+     one full-screen view (match_parent x match_parent, no siblings taking
+     up space) — see item_picker.xml's comment and SlotsAdapter's
+     awakenScrollBarsMethod doc for why that's what makes the round
+     scrollbar draw correctly on this ROM. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/headerTitle"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center"
+    android:textAppearance="@style/TextAppearance.App.Label"
+    android:paddingBottom="@dimen/space_s"
+    android:text="" />

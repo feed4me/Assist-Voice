@@ -1,0 +1,67 @@
+name: Build APK
+
+# Ручной запуск (кнопка Run workflow) и на каждый push/PR в main —
+# см. README про то, почему модель Vosk не хранится в репозитории:
+# скачивается на лету на этом же этапе, тем же способом, что описан
+# там для локальной сборки.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  VOSK_MODEL_URL: https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
+  VOSK_MODEL_DIR: app/src/main/assets/model-ru
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # Кэшируется по URL модели — если ссылка/версия не менялась,
+      # повторные сборки не тянут те же 50 МБ с alphacephei.com заново.
+      - name: Cache Vosk model archive
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: vosk-model.zip
+          key: vosk-model-${{ env.VOSK_MODEL_URL }}
+
+      - name: Download Vosk model
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: curl -L "$VOSK_MODEL_URL" -o vosk-model.zip
+
+      - name: Unpack Vosk model into assets
+        run: |
+          mkdir -p "$VOSK_MODEL_DIR"
+          unzip -q vosk-model.zip -d vosk-model-extracted
+          # Внутри архива один каталог верхнего уровня (vosk-model-small-ru-0.22);
+          # в assets должно лежать его СОДЕРЖИМОЕ (am/, conf/, graph/, ivector/...),
+          # без этой промежуточной папки — иначе Vosk не найдёт файлы модели.
+          inner_dir=$(find vosk-model-extracted -mindepth 1 -maxdepth 1 -type d)
+          cp -r "$inner_dir"/. "$VOSK_MODEL_DIR"/
+          echo "1" > "$VOSK_MODEL_DIR/uuid"
+          ls -la "$VOSK_MODEL_DIR"
+
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AssistVoice-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk

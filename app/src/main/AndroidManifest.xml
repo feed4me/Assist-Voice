@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.hardware.type.watch" />
+    <uses-feature android:name="android.hardware.microphone" android:required="true" />
+
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
+    <!-- In-app update check/download (UpdateChecker, UpdateInstaller) and
+         handing the downloaded APK to the system installer. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- AdbUpdateInstaller: discovering this watch's own Wireless Debugging
+         service (NsdManager/mDNS) needs ACCESS_WIFI_STATE, and multicast
+         packets (which is what mDNS runs over) are dropped by default on
+         Wi-Fi unless the app holds a WifiManager.MulticastLock, which needs
+         CHANGE_WIFI_MULTICAST_STATE. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <!-- RECORD_AUDIO is a "while-in-use" permission: a process only receives
+         real microphone samples while it has a visible Activity or a running
+         foreground service of type microphone. An AccessibilityService provides
+         neither, which is why MicForegroundService exists. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- AdbInstallForegroundService: keeps this process alive for the
+         duration of an in-progress ADB update install, so the firmware's
+         aggressive background-process killing doesn't take out the install
+         while the person is looking at the system "Allow debugging" screen. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- Required on Android 11+ so PackageManager.queryIntentActivities()
+         in AppPickerHelper can see all launchable apps on the watch,
+         not just ones this app already "interacted" with. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme">
+
+        <!-- windowSoftInputMode="adjustPan" on both activities below that
+             contain an EditText (the VAD page's screen-hold field inside
+             MainActivity's pager, and SlotEditActivity's several text
+             fields): see SlotsAdapter's awakenScrollBarsMethod doc comment
+             for why. The default "adjustResize" shrinks the window (and
+             everything measured against it) while the keyboard is open,
+             which is exactly the kind of size change that can desync the
+             round-scrollbar check in android.view.View — adjustPan instead
+             pans the window's contents without resizing anything. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustPan">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".SlotEditActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustPan" />
+
+        <activity
+            android:name=".PickerActivity"
+            android:exported="false" />
+
+        <service
+            android:name=".VoiceAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <service
+            android:name=".MicForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".AdbInstallForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Exposes the downloaded update APK (see UpdateInstaller) to the
+             system package installer as a content:// URI — Android has
+             refused file:// Intent data crossing app boundaries since API 24. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

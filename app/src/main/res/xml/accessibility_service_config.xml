@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    This service does not read screen *content*. It needs two things from the
+    accessibility framework: a long-lived, kill-resistant host process, and the
+    package name of whatever window is in front.
+
+    typeWindowStateChanged carries that package name in the event itself, so
+    canRetrieveWindowContent stays false — we never inspect nodes, only ask
+    "which app is showing". That is what gates listening to the watch face.
+
+    This partly reverses an earlier narrowing to typeAnnouncement alone, which
+    was done to stop the process being woken for every notification on the
+    watch. Window-state changes are far rarer than notifications (they only
+    happen when the person actually navigates) and each one costs a single
+    string comparison, so the trade is worth it.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAnnouncement|typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100" />

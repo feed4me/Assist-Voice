@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Huawei Watch 4 Pro's screen reports as 320dp wide/tall (its native
+         density, not the ~233dp a naive 466px / (326ppi-derived density)
+         calculation would suggest) — use 320dp as the round screen's usable
+         diameter when sizing anything below against how much room it has. -->
+
+    <!-- Screen padding. Horizontal stays modest; vertical is generous on
+         purpose — on a round watch face the ScrollView's own top/bottom
+         padding is what keeps the first and last rows out of the narrow
+         part of the circle where the bezel starts cutting corners off. -->
+    <dimen name="screen_padding_h">22dp</dimen>
+    <dimen name="screen_padding_v">30dp</dimen>
+
+    <!-- Extra bottom margin on the last card of a scrolling page —
+         screen_padding_v alone wasn't enough to fully clear the last card
+         past the round bezel's curve when scrolled all the way down. -->
+    <dimen name="scroll_bottom_extra">28dp</dimen>
+
+    <!-- Logo mark shown above the "ASSIST VOICE" label on the start screen
+         (item_info.xml). Width only — height follows via adjustViewBounds
+         since logo_mark.png isn't a perfect square (204x188 content). -->
+    <dimen name="start_logo_size">72dp</dimen>
+
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_s">8dp</dimen>
+    <dimen name="space_m">12dp</dimen>
+    <dimen name="space_l">18dp</dimen>
+    <dimen name="space_xl">26dp</dimen>
+
+    <dimen name="card_radius">18dp</dimen>
+    <dimen name="button_radius">22dp</dimen>
+    <dimen name="input_radius">12dp</dimen>
+
+</resources>

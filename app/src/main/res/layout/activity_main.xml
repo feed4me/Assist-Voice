@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.viewpager2.widget.ViewPager2
+        android:id="@+id/slotsPager"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Purely decorative, sits on top without intercepting touches (see
+         PageDotsView's doc) — placed above the round screen's bottom edge
+         rather than flush with it, same reasoning as the extra scroll-view
+         padding elsewhere: content right at the bottom of a circle is the
+         first thing the bezel starts cutting into. -->
+    <com.nikolay.assistvoice.PageDotsView
+        android:id="@+id/pageDots"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="14dp" />
+
+</FrameLayout>

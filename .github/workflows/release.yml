@@ -1,0 +1,107 @@
+name: Publish release
+
+# Fires when a tag matching v*.*.* is pushed (e.g. v1.1 or v1.1.0), or can be
+# run by hand for a tag that already exists. Builds a *signed* release APK
+# and publishes it as a GitHub Release with that APK attached — that release
+# is exactly what UpdateChecker.kt (in-app "Проверить обновления") looks at
+# via the GitHub API, and what UpdateInstaller.kt downloads and installs.
+#
+# Requires four repository secrets, set once under
+# Settings → Secrets and variables → Actions:
+#   RELEASE_KEYSTORE_BASE64   base64 of the release .keystore file
+#   RELEASE_KEYSTORE_PASSWORD
+#   RELEASE_KEY_ALIAS
+#   RELEASE_KEY_PASSWORD
+# See README's "Автообновление" section for how these were generated and why
+# the same keystore must be reused for every release, forever — a different
+# key on a later release means Android refuses to install it as an update
+# over whatever's already on the watch.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and publish (e.g. v1.1)'
+        required: true
+
+env:
+  VOSK_MODEL_URL: https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip
+  VOSK_MODEL_DIR: app/src/main/assets/model-ru
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Cache Vosk model archive
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: vosk-model.zip
+          key: vosk-model-${{ env.VOSK_MODEL_URL }}
+
+      - name: Download Vosk model
+        if: steps.cache-model.outputs.cache-hit != 'true'
+        run: curl -L "$VOSK_MODEL_URL" -o vosk-model.zip
+
+      - name: Unpack Vosk model into assets
+        run: |
+          mkdir -p "$VOSK_MODEL_DIR"
+          unzip -q vosk-model.zip -d vosk-model-extracted
+          inner_dir=$(find vosk-model-extracted -mindepth 1 -maxdepth 1 -type d)
+          cp -r "$inner_dir"/. "$VOSK_MODEL_DIR"/
+          echo "1" > "$VOSK_MODEL_DIR/uuid"
+
+      - name: Grant execute permission to gradlew
+        run: chmod +x gradlew
+
+      - name: Decode release keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "::error::RELEASE_KEYSTORE_BASE64 secret is not set — see README's Автообновление section."
+            exit 1
+          fi
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
+      - name: Build signed release APK
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Rename APK for the release asset
+        id: asset
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          name="AssistVoice-${tag}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.asset.outputs.tag }}
+          name: ${{ steps.asset.outputs.tag }}
+          generate_release_notes: true
+          files: ${{ steps.asset.outputs.name }}

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rowRoot"
+    style="@style/Widget.App.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:id="@+id/rowBody"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:background="?attr/selectableItemBackground"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:id="@+id/rowBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.App.Badge"
+            android:text="Прил." />
+
+        <TextView
+            android:id="@+id/rowTarget"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textAppearance="@style/TextAppearance.App.RowTitle"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/rowPhrase"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textAppearance="@style/TextAppearance.App.Hint"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="" />
+
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/rowDelete"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_marginStart="4dp"
+        android:padding="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@drawable/ic_trash"
+        android:clickable="true"
+        android:focusable="true"
+        android:contentDescription="Удалить слот" />
+
+</LinearLayout>

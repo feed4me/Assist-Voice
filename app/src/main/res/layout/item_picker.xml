@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- pickerRecycler's own android:scrollbars is "none" — scrollIndicator
+     (CurvedScrollIndicatorView) draws the curved position indicator instead,
+     independent of the platform's own round-scrollbar mechanism, which
+     turned out not to be reliable on this ROM. The title is the
+     RecyclerView's own first item (see item_picker_header.xml /
+     PickerRowAdapter) rather than a separate TextView sibling, and the
+     empty-list hint is an overlay on top rather than a sibling that takes
+     up layout space — both still true and both still fine, just no longer
+     required for the scrollbar the way they originally were. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/pickerRecycler"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingLeft="@dimen/screen_padding_h"
+        android:paddingRight="@dimen/screen_padding_h"
+        android:paddingTop="@dimen/screen_padding_v"
+        android:paddingBottom="@dimen/screen_padding_v"
+        android:scrollbars="none" />
+
+    <!-- See CurvedScrollIndicatorView's doc comment — replaces
+         pickerRecycler's own (unreliable on this ROM) round scrollbar. -->
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/pickerEmptyHint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:textAppearance="@style/TextAppearance.App.Hint"
+        android:text="Список пуст"
+        android:visibility="gone" />
+
+</FrameLayout>

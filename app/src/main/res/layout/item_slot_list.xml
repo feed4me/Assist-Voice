@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FrameLayout wrapper + scrollIndicator: see CurvedScrollIndicatorView's
+     doc comment. scrollRoot's own android:scrollbars is "none" — the
+     indicator draws over it instead of the platform's own (unreliable on
+     this ROM) round scrollbar. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none"
+    android:clipToPadding="false"
+    android:paddingLeft="@dimen/screen_padding_h"
+    android:paddingRight="@dimen/screen_padding_h"
+    android:paddingTop="@dimen/screen_padding_v"
+    android:paddingBottom="@dimen/screen_padding_v">
+
+    <!-- Padding lives on the ScrollView (above), not here — see item_info.xml
+         for why. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.App.Label"
+            android:text="Команды"
+            android:layout_marginBottom="@dimen/space_s" />
+
+        <Button
+            android:id="@+id/addSlotButton"
+            style="@style/Widget.App.Button.Primary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Добавить слот" />
+
+        <!-- Manual refresh of PickerDataCache (see its class doc) — replaces
+             the earlier automatic broadcast/ContentObserver invalidation,
+             which added complexity for a case (apps/contacts changing while
+             the watch is worn) that's rare enough not to need to be automatic. -->
+        <Button
+            android:id="@+id/syncPickerDataButton"
+            style="@style/Widget.App.Button.Primary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_s"
+            android:text="Синхронизировать приложения и контакты" />
+
+        <LinearLayout
+            android:id="@+id/slotRowsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="@dimen/space_l" />
+
+        <TextView
+            android:id="@+id/emptyHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l"
+            android:gravity="center"
+            android:textAppearance="@style/TextAppearance.App.Hint"
+            android:text="Пока нет ни одной команды"
+            android:visibility="gone" />
+
+    </LinearLayout>
+</ScrollView>
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

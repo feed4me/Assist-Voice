@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FrameLayout wrapper + scrollIndicator: see CurvedScrollIndicatorView's
+     doc comment. scrollRoot's own android:scrollbars is "none" — the
+     indicator draws over it instead of the platform's own (unreliable on
+     this ROM) round scrollbar. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none"
+    android:clipToPadding="false"
+    android:paddingLeft="@dimen/screen_padding_h"
+    android:paddingRight="@dimen/screen_padding_h"
+    android:paddingTop="@dimen/screen_padding_v"
+    android:paddingBottom="@dimen/screen_padding_v">
+
+    <!-- Padding lives on the ScrollView (above), not here — see item_info.xml
+         for why. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.App.Label"
+            android:text="Иконка микрофона"
+            android:layout_marginBottom="@dimen/space_s" />
+
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <CheckBox
+                android:id="@+id/iconEnabledCheck"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="Показывать" />
+
+            <!-- Two live previews so both size and each state's colour are picked
+                 by looking, not by guessing what a number of dp or a colour name
+                 looks like on this screen. -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:orientation="horizontal"
+                android:gravity="center">
+
+                <FrameLayout
+                    android:id="@+id/iconPreviewHolder"
+                    android:layout_width="66dp"
+                    android:layout_height="66dp"
+                    android:background="@drawable/bg_input" />
+
+                <FrameLayout
+                    android:id="@+id/iconPreviewActiveHolder"
+                    android:layout_width="66dp"
+                    android:layout_height="66dp"
+                    android:layout_marginStart="@dimen/space_s"
+                    android:background="@drawable/bg_input" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_xs"
+                android:textAppearance="@style/TextAppearance.App.Hint"
+                android:text="слева — запускается, справа — пишет" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Цвет при запуске" />
+
+            <LinearLayout
+                android:id="@+id/iconColorInitRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_xs"
+                android:orientation="horizontal"
+                android:gravity="center" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Цвет при записи" />
+
+            <LinearLayout
+                android:id="@+id/iconColorActiveRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_xs"
+                android:orientation="horizontal"
+                android:gravity="center" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l"
+            android:layout_marginBottom="@dimen/scroll_bottom_extra">
+
+            <TextView
+                android:id="@+id/iconSizeLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Размер" />
+
+            <SeekBar
+                android:id="@+id/iconSizeSeek"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s" />
+
+            <TextView
+                android:id="@+id/iconOffsetXLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="X" />
+
+            <SeekBar
+                android:id="@+id/iconOffsetXSeek"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s" />
+
+            <TextView
+                android:id="@+id/iconOffsetYLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Y" />
+
+            <SeekBar
+                android:id="@+id/iconOffsetYSeek"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s" />
+
+            <Button
+                android:id="@+id/iconResetButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:text="По центру" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

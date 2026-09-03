@@ -1,0 +1,26 @@
+# Стандартный шаблон Android + правки под этот проект.
+
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Модель распознавания Vosk — скачивается отдельно (см. README), в git не
+# хранится: ~50 МБ бинарных файлов, которые не нужно версионировать.
+app/src/main/assets/model-ru/
+
+# На случай, если когда-нибудь появится релизный keystore.
+*.jks
+*.keystore

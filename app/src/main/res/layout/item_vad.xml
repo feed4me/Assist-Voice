@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FrameLayout wrapper + scrollIndicator: see CurvedScrollIndicatorView's
+     doc comment. scrollRoot's own android:scrollbars is "none" — the
+     indicator draws over it instead of the platform's own (unreliable on
+     this ROM) round scrollbar. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none"
+    android:clipToPadding="false"
+    android:paddingLeft="@dimen/screen_padding_h"
+    android:paddingRight="@dimen/screen_padding_h"
+    android:paddingTop="@dimen/screen_padding_v"
+    android:paddingBottom="@dimen/screen_padding_v">
+
+    <!-- Padding lives on the ScrollView (above), not here — see item_info.xml
+         for why. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.App.Label"
+            android:text="Порог микрофона"
+            android:layout_marginBottom="@dimen/space_s" />
+
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:id="@+id/vadLevelText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Value"
+                android:text="—" />
+
+            <TextView
+                android:id="@+id/vadPeakText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_xs"
+                android:textAppearance="@style/TextAppearance.App.Hint"
+                android:text="пик —" />
+
+            <TextView
+                android:id="@+id/vadStateText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="2dp"
+                android:textAppearance="@style/TextAppearance.App.Hint"
+                android:text="" />
+
+            <Button
+                android:id="@+id/vadResetPeakButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:text="Сбросить пик" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l">
+
+            <TextView
+                android:id="@+id/vadThresholdLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Порог" />
+
+            <SeekBar
+                android:id="@+id/vadThresholdSeek"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s" />
+
+            <TextView
+                android:id="@+id/vadHangoverLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Хвост" />
+
+            <SeekBar
+                android:id="@+id/vadHangoverSeek"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s" />
+
+            <TextView
+                android:id="@+id/vadPrerollLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Преролл" />
+
+            <SeekBar
+                android:id="@+id/vadPrerollSeek"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_s" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l"
+            android:layout_marginBottom="@dimen/scroll_bottom_extra">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Держать экран после команды" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_s"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <EditText
+                    android:id="@+id/screenHoldInput"
+                    android:layout_width="56dp"
+                    android:layout_height="wrap_content"
+                    android:minHeight="0dp"
+                    android:textSize="12sp"
+                    android:gravity="center"
+                    android:inputType="number"
+                    android:maxLength="2"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/space_s"
+                    android:textAppearance="@style/TextAppearance.App.Hint"
+                    android:text="сек (0 — выключено)" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

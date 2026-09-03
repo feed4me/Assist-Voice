@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FrameLayout wrapper + scrollIndicator: see CurvedScrollIndicatorView's
+     doc comment. scrollRoot's own android:scrollbars is "none" — the
+     indicator draws over it instead of the platform's own (unreliable on
+     this ROM) round scrollbar. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none"
+    android:clipToPadding="false"
+    android:paddingLeft="@dimen/screen_padding_h"
+    android:paddingRight="@dimen/screen_padding_h"
+    android:paddingTop="@dimen/screen_padding_v"
+    android:paddingBottom="@dimen/screen_padding_v">
+
+    <!-- Padding lives on the ScrollView (above), not here — see item_info.xml
+         for why. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <!-- On/off + action type -->
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <CheckBox
+                android:id="@+id/enabledCheckbox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="Слот включён" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Тип действия" />
+
+            <Spinner
+                android:id="@+id/actionTypeSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp" />
+
+        </LinearLayout>
+
+        <!-- LAUNCH_APP fields -->
+        <LinearLayout
+            android:id="@+id/launchAppGroup"
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Приложение" />
+
+            <!-- Opens PickerActivity instead of a Spinner — a Spinner's
+                 dropdown is a separate system window the rotary crown can
+                 never reach (see PickerActivity's class doc). -->
+            <TextView
+                android:id="@+id/appPickerField"
+                style="@style/Widget.App.EditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="10sp"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="— выбрать приложение —" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Пакет приложения" />
+
+            <EditText
+                android:id="@+id/packageNameInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="10sp"
+                android:gravity="center"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Класс Activity" />
+
+            <EditText
+                android:id="@+id/activityNameInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="10sp"
+                android:gravity="center"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_m"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Intent Action" />
+
+            <EditText
+                android:id="@+id/intentActionInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="10sp"
+                android:gravity="center"
+                android:inputType="text"
+                android:singleLine="true" />
+
+        </LinearLayout>
+
+        <!-- CALL fields -->
+        <LinearLayout
+            android:id="@+id/callGroup"
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Контакт" />
+
+            <!-- Opens PickerActivity instead of a Spinner — same reasoning
+                 as appPickerField above. -->
+            <TextView
+                android:id="@+id/contactPickerField"
+                style="@style/Widget.App.EditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="10sp"
+                android:gravity="center"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="— выбрать контакт —" />
+
+        </LinearLayout>
+
+        <!-- Wake word — shared by both action types -->
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Слово для запуска" />
+
+            <EditText
+                android:id="@+id/wakeWordInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <!-- The prefix is fixed and comes from the action type, so the
+                 person needs to see the phrase they'll actually have to say,
+                 not just the word they typed. -->
+            <TextView
+                android:id="@+id/phraseHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_s"
+                android:textAppearance="@style/TextAppearance.App.Hint"
+                android:text="" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="@dimen/space_l"
+            android:textAppearance="@style/TextAppearance.App.Hint" />
+
+        <Button
+            android:id="@+id/saveSlotButton"
+            style="@style/Widget.App.Button.Primary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_m"
+            android:text="Сохранить" />
+
+        <Button
+            android:id="@+id/deleteSlotButton"
+            style="@style/Widget.App.Button.Danger"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_s"
+            android:text="Удалить слот" />
+
+    </LinearLayout>
+</ScrollView>
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

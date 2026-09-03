@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base surfaces. Near-black rather than pure black: this app spends most
+         of its life on a round AMOLED watch screen, so deep-but-not-pure-black
+         reduces smearing on some panels while still saving power, and gives
+         cards something to sit on top of. -->
+    <color name="bg_base">#0C0B10</color>
+    <color name="bg_surface">#18161F</color>
+    <color name="bg_surface_alt">#221F2B</color>
+
+    <color name="divider">#2A2733</color>
+    <color name="divider_strong">#3A3646</color>
+
+    <!-- Text -->
+    <color name="text_primary">#F5F3FA</color>
+    <color name="text_secondary">#A8A2BC</color>
+    <color name="text_muted">#726C87</color>
+
+    <!-- Accent: a violet in the same family as the assistant this app is
+         built to trigger, used for anything interactive/selected. -->
+    <color name="accent">#9B6BFF</color>
+    <!-- Same hue as accent, deliberately darker: used only where white text
+         sits on top of a solid fill (primary buttons). accent itself is too
+         light there — white-on-accent is ~3.5:1, under the 4.5:1 text
+         minimum; accent_strong clears ~6:1. Everything that isn't text on a
+         fill (seekbar thumb, checkbox tint, borders) keeps using accent, in
+         which accent's higher own contrast against the dark background
+         actually reads better. -->
+    <color name="accent_strong">#6E29FF</color>
+    <color name="on_accent">#FFFFFF</color>
+
+    <!-- Destructive actions (delete slot). Soft-filled rather than solid red
+         — a full red pill next to a violet Save button reads as an error
+         state even at rest; the outline/soft version stays calm until
+         pressed. -->
+    <color name="danger">#FF6B6B</color>
+    <color name="danger_soft">#2A1620</color>
+
+    <!-- Two-state status pill on the info page (Accessibility service on/off). -->
+    <color name="status_ok_bg">#1B2E22</color>
+    <color name="status_ok_text">#6FE2A0</color>
+    <color name="status_warn_bg">#332018</color>
+    <color name="status_warn_text">#FFA36B</color>
+
+    <color name="ripple_light">#33FFFFFF</color>
+    <color name="ripple_danger">#40FF6B6B</color>
+
+</resources>

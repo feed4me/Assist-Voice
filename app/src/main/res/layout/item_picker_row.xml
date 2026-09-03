@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rowRoot"
+    style="@style/Widget.App.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/space_s"
+    android:orientation="vertical"
+    android:paddingTop="0dp"
+    android:paddingBottom="0dp">
+
+    <!-- The clickable/ripple surface is this inner TextView, not rowRoot —
+         same split as item_slot_row.xml's rowBody, so the ripple stays
+         inside the card's rounded background instead of drawing square
+         corners over it. -->
+    <TextView
+        android:id="@+id/rowLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackground"
+        android:gravity="center"
+        android:textAppearance="@style/TextAppearance.App.RowTitle"
+        android:paddingTop="12dp"
+        android:paddingBottom="12dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:text="" />
+
+</LinearLayout>

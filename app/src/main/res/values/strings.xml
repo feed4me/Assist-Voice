@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Assist Voice</string>
+    <string name="accessibility_service_description">Слушает голосовые команды и запускает выбранные приложения. Не читает содержимое экрана и других приложений — используется только как устойчивый к выгрузке системой фоновый процесс для распознавания речи.</string>
+</resources>

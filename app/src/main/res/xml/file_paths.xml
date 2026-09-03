@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exposes only app/cache/updates/ (see UpdateInstaller.updatesDir) through
+     this app's FileProvider — nothing else in the cache dir needs to be
+     reachable by the system package installer. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="updates" path="updates/" />
+</paths>
