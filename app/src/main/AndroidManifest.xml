@@ -84,6 +84,19 @@
             android:name=".PickerActivity"
             android:exported="false" />
 
+        <!-- Screen "flashlight" — see FlashlightActivity/VoicePhrases. Not
+             reachable from any launcher/menu: only VoiceAccessibilityService
+             starts it, on the hard-coded "включи фонарик" command.
+             singleTask + noHistory keep a repeated command from stacking
+             duplicate windows and keep it out of the recents/back stack. -->
+        <activity
+            android:name=".FlashlightActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Flashlight" />
+
         <service
             android:name=".VoiceAccessibilityService"
             android:exported="true"
