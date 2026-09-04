@@ -73,4 +73,21 @@ object VoicePhrases {
         if (word.isEmpty()) return ""
         return "${prefixFor(actionType)} $word"
     }
+
+    // ------------------------------------------------------------------
+    // Screen "flashlight" — see FlashlightActivity/FlashlightController.
+    // ------------------------------------------------------------------
+
+    /**
+     * Unlike a slot phrase, these two are whole fixed commands, not a prefix
+     * combined with a user-chosen word — there is no variable part, so they
+     * don't go through phraseFor(). They are folded into every grammar build
+     * unconditionally (see VoiceAccessibilityService.ensureRecognizer), never
+     * exposed as a slot type, and not configurable through any settings
+     * screen.
+     */
+    const val PHRASE_FLASHLIGHT_ON = "включи фонарик"
+    const val PHRASE_FLASHLIGHT_OFF = "выключи фонарик"
+
+    val FLASHLIGHT_PHRASES = listOf(PHRASE_FLASHLIGHT_ON, PHRASE_FLASHLIGHT_OFF)
 }
