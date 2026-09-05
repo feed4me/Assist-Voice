@@ -1067,7 +1067,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             // decoy-free attempt right below — never to the slow open-vocab
             // tier over a guess that didn't pan out.
             val decoys = VoicePhrases.DECOY_WORDS_LAUNCH_APP + VoicePhrases.DECOY_WORDS_CALL +
-                VoicePhrases.DECOY_WORDS_MUSIC
+                VoicePhrases.DECOY_WORDS_MUSIC + VoicePhrases.DECOY_WORDS_FLASHLIGHT
             buildWithGrammar(currentModel, grammarJson(phrases + decoys))?.let { built ->
                 recognizer = built
                 recognizerGrammarKey = key
