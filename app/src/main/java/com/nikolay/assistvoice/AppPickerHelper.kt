@@ -16,6 +16,22 @@ data class InstalledApp(
 object AppPickerHelper {
 
     /**
+     * Packages whose actual launcher Activity (per getLaunchIntentForPackage,
+     * used below) can't be started the way this app starts things — an
+     * explicit Intent naming (packageName, activityName) directly (see
+     * VoiceAccessibilityService.launchTargetApp) rather than going through
+     * the system launcher. Huawei's Wallet resolves to CardListActivity,
+     * which isn't exported and throws a SecurityException on that path;
+     * MainActivity is exported and opens the same app fine — found by the
+     * Huawei community (Smart Watch Telegram group) for lack of any API to
+     * ask "which of a package's activities can an outside app actually
+     * start", short of trying each one.
+     */
+    private val LAUNCHER_ACTIVITY_OVERRIDES = mapOf(
+        "com.huawei.wearwallet" to "com.huawei.wearwallet.activity.MainActivity"
+    )
+
+    /**
      * Returns user-facing (non-system) installed apps, sorted by label,
      * for the app picker. Filters out apps with no launcher Activity at
      * all, since those wouldn't be meaningful choices here.
@@ -48,6 +64,7 @@ object AppPickerHelper {
      * Activity, or was uninstalled since the picker list was built).
      */
     fun getLauncherActivityClassName(context: Context, packageName: String): String? {
+        LAUNCHER_ACTIVITY_OVERRIDES[packageName]?.let { return it }
         val intent = context.packageManager.getLaunchIntentForPackage(packageName)
         return intent?.component?.className
     }
