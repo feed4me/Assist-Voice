@@ -59,6 +59,7 @@ object AdbUpdateInstaller {
     // for a person to notice and tap anything — a closed/never-opened
     // Wireless debugging just means there's nothing to repair.
     private const val SELF_REPAIR_WAIT_TIMEOUT_MS = 5_000L
+    private const val KEY_PENDING_REENABLE = "pending_packageinstaller_reenable"
     // Getting here at all can require the person to notice and tap a
     // system "Allow debugging" dialog, and adb's own background
     // auto-connect (see class doc) runs on its own timeline, not ours — a
@@ -169,6 +170,12 @@ object AdbUpdateInstaller {
             return Result.Error("Не удалось скопировать APK на часы")
         }
 
+        // Recorded so a future launch's repair check (see
+        // ensurePackageInstallerEnabled and its callers) only ever fixes a
+        // disable *this app* caused — never a person's own deliberate
+        // "keep it off so I can sideload APKs pm-install can't otherwise
+        // put on" choice made outside of an update.
+        markReenablePending(context, true)
         val disableOutput = shell(context, serial, "pm disable-user --user 0 com.android.packageinstaller")
         Log.i(TAG, "pm disable-user output: ${disableOutput.trim()}")
 
@@ -234,12 +241,14 @@ object AdbUpdateInstaller {
      * Best-effort self-repair for the one failure mode installOverAdb's
      * detached chain can't cover on its own: the watch rebooting (or the
      * chain otherwise getting interrupted) before `pm enable` in it ran,
-     * leaving the package installer disabled after an update. Callers
-     * check locally first (PackageManager) whether that's actually the
-     * case; this just reconnects over whatever ADB trust the last install
-     * already established and re-enables it — no APK involved, and no
-     * pairing prompt if nothing is reachable, since there's nothing more
-     * to show the person either way.
+     * leaving the package installer disabled after an update. Only call
+     * this when [isReenablePending] said this app itself is the one that
+     * disabled it (see markReenablePending) — someone who deliberately
+     * keeps it off to sideload APKs `pm install` can't otherwise put on the
+     * watch would otherwise get overridden every time they open the app.
+     * One attempt only, success or not: [clearReenablePending] always
+     * fires afterward, so a person is free to turn it back off themselves
+     * once this update's own business with it is done.
      */
     fun ensurePackageInstallerEnabled(context: Context) {
         Thread {
@@ -254,8 +263,30 @@ object AdbUpdateInstaller {
                 Log.e(TAG, "Package installer self-repair failed", e)
             } finally {
                 killServer(context)
+                clearReenablePending(context)
             }
         }.start()
+    }
+
+    private fun prefs(context: Context) =
+        context.applicationContext.getSharedPreferences("adb_update_installer", Context.MODE_PRIVATE)
+
+    private fun markReenablePending(context: Context, pending: Boolean) {
+        prefs(context).edit().putBoolean(KEY_PENDING_REENABLE, pending).apply()
+    }
+
+    /**
+     * True only while this app has disabled the package installer for an
+     * update of its own and hasn't yet confirmed (or given up trying) that
+     * it put it back — see [installOverAdb] and [ensurePackageInstallerEnabled].
+     * Never true just because the package installer happens to be off for
+     * some unrelated reason.
+     */
+    fun isReenablePending(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_PENDING_REENABLE, false)
+
+    fun clearReenablePending(context: Context) {
+        markReenablePending(context, false)
     }
 
     private fun push(context: Context, serial: String, localFile: File, remotePath: String): Boolean {
