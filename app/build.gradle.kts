@@ -100,11 +100,17 @@ dependencies {
     // YandexMusicController: controls the separate YandexMusicWatch app's
     // player over its MediaLibraryService (see that app's own README) via a
     // plain MediaController — no dependency on that app itself, just the
-    // standard Media3 session client API. Version matches what
-    // YandexMusicWatch itself builds against, though any client of a
-    // MediaLibraryService this old is expected to interoperate regardless.
-    implementation("androidx.media3:media3-session:1.9.4")
-    implementation("androidx.media3:media3-common:1.9.4")
+    // standard Media3 session client API. MediaController/MediaLibraryService
+    // is a stable cross-process protocol, so this client's Media3 version
+    // doesn't need to match YandexMusicWatch's own (1.9.4).
+    //
+    // Pinned to 1.4.1 rather than a newer release: 1.5.0 raised Media3's own
+    // minimum compileSdk to 35 (see its release notes), which this project's
+    // compileSdk 34 / AGP 8.5.2 can't satisfy without a much wider bump —
+    // 1.4.1 is the last release before that requirement, with everything
+    // YandexMusicController needs (MediaController, SessionToken).
+    implementation("androidx.media3:media3-session:1.4.1")
+    implementation("androidx.media3:media3-common:1.4.1")
 
     // Pure-Java QR encoder for the info page's repo link — no Android
     // dependency of its own, so it doesn't pull in anything else.
