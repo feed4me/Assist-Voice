@@ -96,10 +96,14 @@ object VoicePhrases {
      * as DECOY_WORDS_MUSIC below (a landing spot for audio that resembles
      * "фонарик" without a clearly-heard "включи"/"выключи" in front of it),
      * kept separate since the flashlight phrases don't share this word with
-     * anything else. Not individually re-verified — see DECOY_WORDS_MUSIC's
-     * doc for the fallback this relies on.
+     * anything else. "форточка" is a common, everyday word sharing
+     * "фонарик"'s opening sound — on a model this small, an ordinary
+     * high-frequency word is a safer bet to actually be in-vocabulary than
+     * an exact inflected form of the target word itself. Not individually
+     * re-verified — see DECOY_WORDS_MUSIC's doc for the fallback this
+     * relies on.
      */
-    val DECOY_WORDS_FLASHLIGHT = listOf("фонарика", "фонарики", "фонариком")
+    val DECOY_WORDS_FLASHLIGHT = listOf("фонарика", "фонарики", "фонариком", "форточка")
 
     // ------------------------------------------------------------------
     // YandexMusicWatch playback control — see YandexMusicController.
@@ -149,15 +153,21 @@ object VoicePhrases {
      * VoiceAccessibilityService.ensureRecognizer) — one bad word anywhere
      * in that combined list drops ALL of them, not just its own phrase's,
      * so growing this list is a real tradeoff, not a free addition.
+     *
+     * "вода"/"музей"/"чек"/"след"/"приду"/"любовь" are ordinary,
+     * high-frequency words rather than inflected forms of the target words
+     * themselves — on a model this small, a common everyday word sharing
+     * the target's opening/rhyme is a safer bet to actually be
+     * in-vocabulary than an exact but rarer case form.
      */
     val DECOY_WORDS_MUSIC = listOf(
         "включи", "включить", "включил", "включу",
         "выключи", "выключить", "выключил", "выключу",
-        "волна", "волны", "волной",
-        "музыка", "музыки", "музыкой",
-        "трека", "треки", "треком",
-        "следующая", "следующее", "следующего",
-        "предыдущая", "предыдущее", "предыдущего",
-        "любимый", "любимая", "любимое"
+        "волна", "волны", "волной", "вода",
+        "музыка", "музыки", "музыкой", "музей",
+        "трека", "треки", "треком", "чек",
+        "следующая", "следующее", "следующего", "след",
+        "предыдущая", "предыдущее", "предыдущего", "приду",
+        "любимый", "любимая", "любимое", "любовь"
     )
 }
