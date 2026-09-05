@@ -47,6 +47,12 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+
+        <!-- Lets MainActivity's repairPackageInstallerIfNeeded() call
+             PackageManager.getApplicationEnabledSetting() on this package
+             — see AdbUpdateInstaller.ensurePackageInstallerEnabled() for
+             why that state can end up stuck disabled after an update. -->
+        <package android:name="com.android.packageinstaller" />
     </queries>
 
     <application

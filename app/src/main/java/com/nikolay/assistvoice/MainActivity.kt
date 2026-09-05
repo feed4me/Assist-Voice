@@ -117,6 +117,7 @@ class MainActivity : AppCompatActivity() {
         loadPickerDataAsync()
         requestPermissionsIfNeeded()
         focusCurrentPage(pager.currentItem)
+        repairPackageInstallerIfNeeded()
     }
 
     override fun onStart() {
@@ -168,6 +169,29 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Обновляю списки приложений и контактов…", Toast.LENGTH_SHORT).show()
         PickerDataCache.invalidate()
         loadPickerDataAsync()
+    }
+
+    /**
+     * installOverAdb's own detached install chain (see AdbUpdateInstaller)
+     * re-enables the package installer after every update on its own; this
+     * is just the backstop for the rare case that gets interrupted (e.g.
+     * the watch rebooting mid-update) and it's left disabled. The check
+     * itself is a plain local PackageManager query — no ADB involved
+     * unless it actually finds a problem to fix.
+     */
+    private fun repairPackageInstallerIfNeeded() {
+        val disabled = try {
+            when (packageManager.getApplicationEnabledSetting("com.android.packageinstaller")) {
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER -> true
+                else -> false
+            }
+        } catch (e: IllegalArgumentException) {
+            false
+        }
+        if (disabled) {
+            AdbUpdateInstaller.ensurePackageInstallerEnabled(this)
+        }
     }
 
     // ---- Updates ----

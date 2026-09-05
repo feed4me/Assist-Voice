@@ -44,8 +44,21 @@ object AdbUpdateInstaller {
 
     private const val TAG = "AdbUpdateInstaller"
     private const val REMOTE_APK_NAME = "assistvoice-update.apk"
+    private const val REMOTE_LOG_NAME = "assistvoice-update.log"
     private const val PAIR_SERVICE_TYPE = "_adb-tls-pairing._tcp"
     private const val POLL_INTERVAL_MS = 500L
+    // Bounds how long installOverAdb waits for the detached install chain
+    // (see its doc comment) to report a result before giving up on reading
+    // it back — this app's own process is expected to die partway through
+    // most of the time, which is fine: the chain it's polling for keeps
+    // running on its own either way.
+    private const val INSTALL_POLL_TIMEOUT_MS = 20_000L
+    // ensurePackageInstallerEnabled only ever has anything to reconnect to
+    // right after a previous install already established ADB trust, so
+    // unlike DEVICE_WAIT_TIMEOUT_MS below this doesn't need to wait around
+    // for a person to notice and tap anything — a closed/never-opened
+    // Wireless debugging just means there's nothing to repair.
+    private const val SELF_REPAIR_WAIT_TIMEOUT_MS = 5_000L
     // Getting here at all can require the person to notice and tap a
     // system "Allow debugging" dialog, and adb's own background
     // auto-connect (see class doc) runs on its own timeline, not ours — a
@@ -151,6 +164,7 @@ object AdbUpdateInstaller {
         // FUSE layer, which is why pm install targets a real filesystem path
         // instead.
         val remotePath = "/data/local/tmp/$REMOTE_APK_NAME"
+        val logPath = "/data/local/tmp/$REMOTE_LOG_NAME"
         if (!push(context, serial, apkFile, remotePath)) {
             return Result.Error("Не удалось скопировать APK на часы")
         }
@@ -158,27 +172,90 @@ object AdbUpdateInstaller {
         val disableOutput = shell(context, serial, "pm disable-user --user 0 com.android.packageinstaller")
         Log.i(TAG, "pm disable-user output: ${disableOutput.trim()}")
 
-        // Install, re-enable and cleanup are one shell command (`;`, not
-        // `&&`, so later steps still run if an earlier one fails) rather
-        // than separate adb invocations: installing an update over this
-        // app's own running process makes Android force-stop every process
-        // under this app's UID as part of applying it — including this
-        // app's local adb client/server processes — which can happen
-        // before this call even returns. Chained into a single remote
-        // shell command, the actual execution happens under the watch's
-        // `shell` UID, not this app's, so it keeps going regardless of
-        // what happens to us.
-        val output = shell(
+        // `pm install` kills every process under this app's UID as part of
+        // applying the update — including this app's local adb client,
+        // which is what's holding the adb shell session this command would
+        // otherwise run in. That tears the session down (adbd hangs up its
+        // remote shell child once the client disconnects), so a plain
+        // `cmd1; cmd2; cmd3` chain launched in that same session can die
+        // along with `pm install` before `pm enable`/`rm` ever get to run —
+        // leaving the package installer disabled for good. `setsid` puts
+        // the whole chain in its own session and `nohup` ignores the
+        // hangup too, so once launched it keeps running fully detached
+        // from this session no matter what happens to us. This call only
+        // starts that detached chain and returns immediately — it does not
+        // wait for install to finish, so the actual result is read back
+        // separately via pollInstallResult().
+        val remoteCommand =
+            "pm install -r $remotePath; pm enable --user 0 com.android.packageinstaller; rm -f $remotePath"
+        shell(
             context,
             serial,
-            "pm install -r $remotePath; pm enable --user 0 com.android.packageinstaller; rm -f $remotePath"
+            "setsid nohup sh -c '$remoteCommand' >$logPath 2>&1 </dev/null &"
         )
-        Log.i(TAG, "pm install output: ${output.trim().take(500)}")
-        return if (output.contains("Success", ignoreCase = true)) {
-            Result.Success
-        } else {
-            Result.Error("Установка не удалась: ${output.trim().take(200)}")
+
+        return pollInstallResult(context, serial, logPath)
+    }
+
+    /**
+     * Best-effort readback of [logPath] for immediate UI feedback. Most of
+     * the time this app's own process dies partway through (see
+     * installOverAdb's doc comment) before it ever gets a real answer —
+     * that's expected and harmless, since the detached chain it's polling
+     * for keeps running on its own regardless. [ensurePackageInstallerEnabled]
+     * is the actual backstop for the rare case where even that gets
+     * interrupted (e.g. the watch reboots mid-update).
+     */
+    private fun pollInstallResult(context: Context, serial: String, logPath: String): Result {
+        val deadline = System.currentTimeMillis() + INSTALL_POLL_TIMEOUT_MS
+        var lastOutput = ""
+        while (System.currentTimeMillis() < deadline) {
+            val output = shell(context, serial, "cat $logPath 2>/dev/null")
+            if (output.isNotBlank()) {
+                lastOutput = output
+                if (output.contains("Success", ignoreCase = true)) {
+                    return Result.Success
+                }
+                if (output.contains("Failure", ignoreCase = true)) {
+                    return Result.Error("Установка не удалась: ${output.trim().take(200)}")
+                }
+            }
+            Thread.sleep(POLL_INTERVAL_MS)
         }
+        // No definite answer within the window — by far the most likely
+        // reason is that this process is dying (or already would have,
+        // were this thread not about to go with it) as the update takes
+        // effect, not a real hang.
+        Log.i(TAG, "Install result unknown after ${INSTALL_POLL_TIMEOUT_MS}ms, last log: ${lastOutput.trim().take(500)}")
+        return Result.Success
+    }
+
+    /**
+     * Best-effort self-repair for the one failure mode installOverAdb's
+     * detached chain can't cover on its own: the watch rebooting (or the
+     * chain otherwise getting interrupted) before `pm enable` in it ran,
+     * leaving the package installer disabled after an update. Callers
+     * check locally first (PackageManager) whether that's actually the
+     * case; this just reconnects over whatever ADB trust the last install
+     * already established and re-enables it — no APK involved, and no
+     * pairing prompt if nothing is reachable, since there's nothing more
+     * to show the person either way.
+     */
+    fun ensurePackageInstallerEnabled(context: Context) {
+        Thread {
+            try {
+                startServer(context)
+                val serial = waitForDevice(context, SELF_REPAIR_WAIT_TIMEOUT_MS)
+                if (serial != null) {
+                    val output = shell(context, serial, "pm enable --user 0 com.android.packageinstaller")
+                    Log.i(TAG, "pm enable (self-repair) output: ${output.trim()}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Package installer self-repair failed", e)
+            } finally {
+                killServer(context)
+            }
+        }.start()
     }
 
     private fun push(context: Context, serial: String, localFile: File, remotePath: String): Boolean {
