@@ -97,6 +97,15 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.13.0@aar")
     implementation("com.alphacephei:vosk-android:0.3.47@aar")
 
+    // YandexMusicController: controls the separate YandexMusicWatch app's
+    // player over its MediaLibraryService (see that app's own README) via a
+    // plain MediaController — no dependency on that app itself, just the
+    // standard Media3 session client API. Version matches what
+    // YandexMusicWatch itself builds against, though any client of a
+    // MediaLibraryService this old is expected to interoperate regardless.
+    implementation("androidx.media3:media3-session:1.9.4")
+    implementation("androidx.media3:media3-common:1.9.4")
+
     // Pure-Java QR encoder for the info page's repo link — no Android
     // dependency of its own, so it doesn't pull in anything else.
     implementation("com.google.zxing:core:3.5.3")

@@ -70,6 +70,15 @@ import org.vosk.android.StorageService
  * ensureRecognizer() for how they're added to the grammar and
  * handleHypothesis() for how they're matched ahead of, and independently of,
  * user slots; FlashlightController and FlashlightActivity for what they do.
+ *
+ * ## YandexMusicWatch playback control
+ *
+ * VoicePhrases.MUSIC_PHRASES ("включи волну", "включи музыку", "выключи
+ * музыку", "включи любимую музыку", "следующий трек", "предыдущий трек")
+ * are the same kind of reserved, always-present commands as the flashlight
+ * ones above, matched the same way in handleHypothesis() and dispatched to
+ * YandexMusicController — see its class doc for how it reaches that
+ * separate app's player.
  */
 class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink {
 
@@ -1033,11 +1042,14 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
      */
     private fun ensureRecognizer(): Recognizer? {
         val currentModel = model ?: return null
-        // The two flashlight phrases are folded in unconditionally — they are
-        // reserved commands outside the slot mechanism entirely (see
-        // VoicePhrases), always active regardless of what slots exist.
-        val phrases = (activePhrases.filter { it.isNotBlank() } + VoicePhrases.FLASHLIGHT_PHRASES)
-            .distinct()
+        // The flashlight and music phrases are folded in unconditionally —
+        // they are reserved commands outside the slot mechanism entirely
+        // (see VoicePhrases), always active regardless of what slots exist.
+        val phrases = (
+            activePhrases.filter { it.isNotBlank() } +
+                VoicePhrases.FLASHLIGHT_PHRASES +
+                VoicePhrases.MUSIC_PHRASES
+            ).distinct()
         val key = phrases.joinToString("|")
 
         recognizer?.let { existing ->
@@ -1054,7 +1066,8 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             // rejected as a whole and this falls through to the identical
             // decoy-free attempt right below — never to the slow open-vocab
             // tier over a guess that didn't pan out.
-            val decoys = VoicePhrases.DECOY_WORDS_LAUNCH_APP + VoicePhrases.DECOY_WORDS_CALL
+            val decoys = VoicePhrases.DECOY_WORDS_LAUNCH_APP + VoicePhrases.DECOY_WORDS_CALL +
+                VoicePhrases.DECOY_WORDS_MUSIC
             buildWithGrammar(currentModel, grammarJson(phrases + decoys))?.let { built ->
                 recognizer = built
                 recognizerGrammarKey = key
@@ -1245,18 +1258,26 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         // Vosk emits lowercase Russian, so a raw substring scan rules out the
         // overwhelming majority of emissions without allocating anything.
         // "выключи фонарик" is checked unconditionally; the rest of the
-        // grammar (slots, "включи фонарик") only matters when the flashlight
-        // screen isn't already showing — see the flashlightShowing branch
-        // below for why.
+        // grammar (slots, "включи фонарик", music commands) only matters
+        // when the flashlight screen isn't already showing — see the
+        // flashlightShowing branch below for why.
         var candidate = hypothesisJson.contains(VoicePhrases.PHRASE_FLASHLIGHT_OFF)
         if (!candidate && !flashlightShowing) {
             if (hypothesisJson.contains(VoicePhrases.PHRASE_FLASHLIGHT_ON)) {
                 candidate = true
             } else {
-                for (phrase in phrases) {
-                    if (phrase.isNotEmpty() && hypothesisJson.contains(phrase)) {
+                for (phrase in VoicePhrases.MUSIC_PHRASES) {
+                    if (hypothesisJson.contains(phrase)) {
                         candidate = true
                         break
+                    }
+                }
+                if (!candidate) {
+                    for (phrase in phrases) {
+                        if (phrase.isNotEmpty() && hypothesisJson.contains(phrase)) {
+                            candidate = true
+                            break
+                        }
                     }
                 }
             }
@@ -1295,6 +1316,15 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             if (final) logFinalForCalibration(hypothesisJson)
             handler.post { onFlashlightOnCommand() }
             return
+        }
+
+        for (phrase in VoicePhrases.MUSIC_PHRASES) {
+            if (containsWholePhrase(text, phrase)) {
+                Log.i(TAG, "Match: heard «$text» → $phrase (final=$final)")
+                if (final) logFinalForCalibration(hypothesisJson)
+                handler.post { onMusicCommand(phrase) }
+                return
+            }
         }
 
         val matchedIndex = phrases.indexOfFirst {
@@ -1391,6 +1421,27 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
 
     private fun onFlashlightOffCommand() {
         FlashlightController.requestClose()
+    }
+
+    // ------------------------------------------------------------------
+    // Music command dispatch (main thread)
+    // ------------------------------------------------------------------
+
+    /**
+     * Like onFlashlightOnCommand() above, this doesn't touch foregroundPackage
+     * or the mic bookkeeping a LAUNCH_APP/CALL slot needs — YandexMusicController
+     * talks to the other app's player over a MediaController binder connection,
+     * never bringing any of its UI to the foreground on this watch.
+     */
+    private fun onMusicCommand(phrase: String) {
+        when (phrase) {
+            VoicePhrases.PHRASE_MUSIC_WAVE -> YandexMusicController.playWave(this)
+            VoicePhrases.PHRASE_MUSIC_LIKES -> YandexMusicController.playLikes(this)
+            VoicePhrases.PHRASE_MUSIC_ON -> YandexMusicController.resume(this)
+            VoicePhrases.PHRASE_MUSIC_OFF -> YandexMusicController.pause(this)
+            VoicePhrases.PHRASE_MUSIC_NEXT -> YandexMusicController.next(this)
+            VoicePhrases.PHRASE_MUSIC_PREV -> YandexMusicController.previous(this)
+        }
     }
 
     // ------------------------------------------------------------------

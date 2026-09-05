@@ -90,4 +90,49 @@ object VoicePhrases {
     const val PHRASE_FLASHLIGHT_OFF = "выключи фонарик"
 
     val FLASHLIGHT_PHRASES = listOf(PHRASE_FLASHLIGHT_ON, PHRASE_FLASHLIGHT_OFF)
+
+    // ------------------------------------------------------------------
+    // YandexMusicWatch playback control — see YandexMusicController.
+    // ------------------------------------------------------------------
+
+    /**
+     * Same kind of fixed, non-slot reserved commands as the flashlight
+     * phrases above — folded into every grammar build unconditionally (see
+     * VoiceAccessibilityService.ensureRecognizer), never exposed as a slot
+     * type or a settings screen.
+     */
+    const val PHRASE_MUSIC_WAVE = "включи волну"
+    const val PHRASE_MUSIC_LIKES = "включи любимую музыку"
+    /** No target section — just resumes whatever was last playing (or
+     * starts the wave if nothing was), via YandexMusicController.resume(). */
+    const val PHRASE_MUSIC_ON = "включи музыку"
+    const val PHRASE_MUSIC_OFF = "выключи музыку"
+    const val PHRASE_MUSIC_NEXT = "следующий трек"
+    const val PHRASE_MUSIC_PREV = "предыдущий трек"
+
+    val MUSIC_PHRASES = listOf(
+        PHRASE_MUSIC_WAVE, PHRASE_MUSIC_LIKES, PHRASE_MUSIC_ON,
+        PHRASE_MUSIC_OFF, PHRASE_MUSIC_NEXT, PHRASE_MUSIC_PREV
+    )
+
+    /**
+     * Decoy words for the "включи"/"выключи" prefixes shared by the phrases
+     * above (and by PHRASE_FLASHLIGHT_ON/OFF) — same purpose as
+     * DECOY_WORDS_LAUNCH_APP/CALL: without these, ambiguous audio that only
+     * resembles one of these prefixes has nowhere cheap to land, so a
+     * closed grammar tends to force it onto a full real command instead
+     * (this is why plain "включи", said alone, used to snap onto "включи
+     * фонарик" — there was no decoy list for this prefix family at all).
+     * Includes the bare prefixes themselves, unlike the open/call decoy
+     * lists, specifically to give a truncated "включи"/"выключи" with
+     * nothing (or noise) after it an exact one-word match instead of
+     * forcing the decoder to invent a second word from that noise.
+     * Not individually re-verified against vosk-model-small-ru-0.22's
+     * vocabulary (see VoicePhrases' class doc) — a wrong guess here just
+     * falls back to the decoy-free grammar, same safety net as the others.
+     */
+    val DECOY_WORDS_MUSIC = listOf(
+        "включи", "включить", "включил", "включу",
+        "выключи", "выключить", "выключил", "выключу"
+    )
 }
