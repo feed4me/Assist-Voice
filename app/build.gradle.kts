@@ -11,8 +11,8 @@ android {
         applicationId = "com.nikolay.assistvoice"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.11"
+        versionCode = 3
+        versionName = "1.12"
 
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
