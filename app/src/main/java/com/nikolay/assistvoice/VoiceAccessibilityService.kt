@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
@@ -74,11 +75,29 @@ import org.vosk.android.StorageService
  * ## YandexMusicWatch playback control
  *
  * VoicePhrases.MUSIC_PHRASES ("включи волну", "включи музыку", "выключи
- * музыку", "включи любимую музыку", "следующий трек", "предыдущий трек")
- * are the same kind of reserved, always-present commands as the flashlight
- * ones above, matched the same way in handleHypothesis() and dispatched to
- * YandexMusicController — see its class doc for how it reaches that
- * separate app's player.
+ * музыку", "включи любимую музыку", "следующий трек", "предыдущий трек",
+ * "продолжи воспроизведение") are the same kind of reserved, always-present
+ * commands as the flashlight ones above, matched the same way in
+ * handleHypothesis() and dispatched to YandexMusicController — see its
+ * class doc for how it reaches that separate app's player, and for which
+ * of these are pinned to it specifically versus generic. Controlling a
+ * connected phone's own relayed playback specifically was investigated and
+ * found impossible (see YandexMusicController's class doc).
+ *
+ * ## Answering/declining an incoming call
+ *
+ * "прими звонок" / "отклони звонок" (VoicePhrases.CALL_ACTION_PHRASES) are
+ * reserved phrases too, but unlike the two features above they need
+ * recognition to work somewhere listening is normally never allowed: an
+ * incoming call takes over the foreground with its own UI, not the watch
+ * face, and listening is otherwise confined to the watch face specifically
+ * (see isOnWatchFace()'s callers). [callRinging], set from the call-state
+ * listener the instant CALL_STATE_RINGING is reported, is a second,
+ * temporary exception threaded through those same callers — see its own
+ * doc for exactly where. answerRingingCall()/declineRingingCall() are
+ * where the phrases actually do something, via TelecomManager; both are
+ * deliberately no-ops unless callRinging is still true at that moment, so
+ * a stale/delayed match can't act on a call that already stopped ringing.
  */
 class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink {
 
@@ -237,6 +256,22 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     private var telephonyManager: TelephonyManager? = null
     private var legacyPhoneStateListener: PhoneStateListener? = null
     private var modernTelephonyCallback: TelephonyCallback? = null
+
+    /**
+     * True from the moment the call-state listener reports
+     * CALL_STATE_RINGING until it reports anything else (answered, ended,
+     * or an outgoing call started). Read by isOnWatchFace()'s callers —
+     * onForegroundPackageChanged(), startListening(), beginCapture(),
+     * refreshSlotCache() — as a second, temporary "allowed to listen here"
+     * condition alongside actually being on the watch face, since the
+     * incoming-call UI is what's in the foreground for as long as this is
+     * true. Also gates answerRingingCall()/declineRingingCall() themselves,
+     * so a command recognized just as the call stops ringing (answered
+     * elsewhere, hung up by the caller) can't act on whatever call is
+     * active afterward.
+     */
+    @Volatile
+    private var callRinging = false
 
     /**
      * Read on the capture loop's reader thread on every frame, written on the
@@ -418,13 +453,16 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     private fun isOnWatchFace(): Boolean = foregroundPackage in WATCH_FACE_PACKAGES
 
     /**
-     * Listening is deliberately confined to the watch face. Leaving it drops
-     * the microphone immediately rather than waiting for the screen to go off,
+     * Listening is deliberately confined to the watch face — except while
+     * [callRinging], since the incoming-call UI that's in the foreground for
+     * that whole window is exactly where "прими звонок"/"отклони звонок"
+     * need to be heard. Leaving the watch face otherwise drops the
+     * microphone immediately rather than waiting for the screen to go off,
      * which both removes the indicator from on top of whatever the person
      * opened and stops the decoder while they are actually using the watch.
      */
     private fun onForegroundPackageChanged() {
-        if (isOnWatchFace()) {
+        if (isOnWatchFace() || callRinging) {
             if (screenOn) startListening()
         } else {
             // Left the watch face: the icon must not sit on top of whatever the
@@ -496,7 +534,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             if (screenOn) startListening()
         } else if (isListening) {
             postStatus(listeningStatusText())
-        } else if (screenOn && isOnWatchFace()) {
+        } else if (screenOn && (isOnWatchFace() || callRinging)) {
             startListening()
         }
     }
@@ -750,7 +788,8 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     }
 
     // ------------------------------------------------------------------
-    // Call-state handling (works around mic silencing after calls)
+    // Call-state handling (works around mic silencing after calls; also
+    // drives callRinging for "прими звонок"/"отклони звонок")
     // ------------------------------------------------------------------
 
     private fun registerCallStateListener() {
@@ -766,7 +805,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val callback = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
                 override fun onCallStateChanged(state: Int) {
-                    if (state == TelephonyManager.CALL_STATE_IDLE) onCallEnded()
+                    dispatchCallState(state)
                 }
             }
             try {
@@ -780,7 +819,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             val listener = object : PhoneStateListener() {
                 @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
                 override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-                    if (state == TelephonyManager.CALL_STATE_IDLE) onCallEnded()
+                    dispatchCallState(state)
                 }
             }
             try {
@@ -791,6 +830,41 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
                 Log.e(TAG, "Failed to register PhoneStateListener", e)
             }
         }
+    }
+
+    /** Shared by both the modern TelephonyCallback and legacy PhoneStateListener paths above. */
+    private fun dispatchCallState(state: Int) {
+        when (state) {
+            TelephonyManager.CALL_STATE_RINGING -> onCallRinging()
+            TelephonyManager.CALL_STATE_OFFHOOK -> onCallNoLongerRinging()
+            TelephonyManager.CALL_STATE_IDLE -> onCallEnded()
+        }
+    }
+
+    /**
+     * A call just started ringing — flips [callRinging] on, which is what
+     * lets isOnWatchFace()'s callers keep listening (or start listening
+     * right now, here) even though the incoming-call UI, not the watch
+     * face, is what's actually in front.
+     */
+    private fun onCallRinging() {
+        callRinging = true
+        Log.i(TAG, "Call ringing — allowing recognition outside the watch face")
+        if (screenOn) startListening()
+    }
+
+    /**
+     * The call stopped ringing without going through onCallEnded() —
+     * answered (by "прими звонок", by hand, or the caller hung up first).
+     * Flips [callRinging] back off and, since the in-call UI (still not
+     * the watch face) is presumably what's in front now, falls back to the
+     * normal watch-face-only gate exactly like onForegroundPackageChanged()
+     * would for any other non-watch-face foreground.
+     */
+    private fun onCallNoLongerRinging() {
+        if (!callRinging) return
+        callRinging = false
+        if (!isOnWatchFace() && isListening) stopListening(updateStatus = false)
     }
 
     private fun unregisterCallStateListener() {
@@ -819,7 +893,18 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     }
 
     private fun onCallEnded() {
-        if (!lastActionWasCall) return
+        // CALL_STATE_IDLE also fires for an incoming call that ends without
+        // ever being answered (declined via "отклони звонок", by hand, or
+        // the caller hung up first) — callRinging must come back off in
+        // that case too, not just when this app placed the call itself, or
+        // it would stay stuck true and keep listening allowed outside the
+        // watch face forever.
+        val wasRinging = callRinging
+        callRinging = false
+        if (!lastActionWasCall) {
+            if (wasRinging && !isOnWatchFace() && isListening) stopListening(updateStatus = false)
+            return
+        }
         Log.i(TAG, "Call ended — forcing recognizer restart")
         lastActionWasCall = false
         // The post-action timer may still be pending; without clearing the
@@ -871,7 +956,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         if (isListening) return
         if (model == null) return // loadModel's callback will call back in
 
-        if (!isOnWatchFace()) {
+        if (!isOnWatchFace() && !callRinging) {
             postStatus("Ждёт циферблата")
             return
         }
@@ -898,7 +983,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
      */
     private fun beginCapture() {
         if (isListening || !screenOn || model == null) return
-        if (!isOnWatchFace()) return
+        if (!isOnWatchFace() && !callRinging) return
 
         // The overlay goes up BEFORE the microphone is probed, not after it
         // fails. On a static preset watch face this ROM wakes by putting up a
@@ -1042,13 +1127,15 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
      */
     private fun ensureRecognizer(): Recognizer? {
         val currentModel = model ?: return null
-        // The flashlight and music phrases are folded in unconditionally —
-        // they are reserved commands outside the slot mechanism entirely
-        // (see VoicePhrases), always active regardless of what slots exist.
+        // The flashlight, music and call-action phrases are folded in
+        // unconditionally — they are reserved commands outside the slot
+        // mechanism entirely (see VoicePhrases), always active regardless
+        // of what slots exist.
         val phrases = (
             activePhrases.filter { it.isNotBlank() } +
                 VoicePhrases.FLASHLIGHT_PHRASES +
-                VoicePhrases.MUSIC_PHRASES
+                VoicePhrases.MUSIC_PHRASES +
+                VoicePhrases.CALL_ACTION_PHRASES
             ).distinct()
         val key = phrases.joinToString("|")
 
@@ -1067,7 +1154,8 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             // decoy-free attempt right below — never to the slow open-vocab
             // tier over a guess that didn't pan out.
             val decoys = VoicePhrases.DECOY_WORDS_LAUNCH_APP + VoicePhrases.DECOY_WORDS_CALL +
-                VoicePhrases.DECOY_WORDS_MUSIC + VoicePhrases.DECOY_WORDS_FLASHLIGHT
+                VoicePhrases.DECOY_WORDS_MUSIC + VoicePhrases.DECOY_WORDS_FLASHLIGHT +
+                VoicePhrases.DECOY_WORDS_CALL_ACTION
             buildWithGrammar(currentModel, grammarJson(phrases + decoys))?.let { built ->
                 recognizer = built
                 recognizerGrammarKey = key
@@ -1273,6 +1361,14 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
                     }
                 }
                 if (!candidate) {
+                    for (phrase in VoicePhrases.CALL_ACTION_PHRASES) {
+                        if (hypothesisJson.contains(phrase)) {
+                            candidate = true
+                            break
+                        }
+                    }
+                }
+                if (!candidate) {
                     for (phrase in phrases) {
                         if (phrase.isNotEmpty() && hypothesisJson.contains(phrase)) {
                             candidate = true
@@ -1323,6 +1419,15 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
                 Log.i(TAG, "Match: heard «$text» → $phrase (final=$final)")
                 if (final) logFinalForCalibration(hypothesisJson)
                 handler.post { onMusicCommand(phrase) }
+                return
+            }
+        }
+
+        for (phrase in VoicePhrases.CALL_ACTION_PHRASES) {
+            if (containsWholePhrase(text, phrase)) {
+                Log.i(TAG, "Match: heard «$text» → $phrase (final=$final)")
+                if (final) logFinalForCalibration(hypothesisJson)
+                handler.post { onCallActionCommand(phrase) }
                 return
             }
         }
@@ -1432,8 +1537,21 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
      * or the mic bookkeeping a LAUNCH_APP/CALL slot needs — YandexMusicController
      * talks to the other app's player over a MediaController binder connection,
      * never bringing any of its UI to the foreground on this watch.
+     *
+     * Still needs the same launchInFlight guard onCommandDetected() uses,
+     * though: handleHypothesis() matches a spoken phrase against both its
+     * partial (final=false) and final (final=true) recognizer results, and
+     * without this guard both matches call this method for what was really
+     * one spoken command — e.g. one "следующий трек" silently skipping two
+     * tracks. Slot commands never hit this because onCommandDetected() sets
+     * the flag; flashlight is naturally idempotent (isShowing/requestClose
+     * both no-op on a repeat) so the same double dispatch there is harmless,
+     * but a repeated YandexMusicController call is not.
      */
     private fun onMusicCommand(phrase: String) {
+        if (launchInFlight) return
+        launchInFlight = true
+
         when (phrase) {
             VoicePhrases.PHRASE_MUSIC_WAVE -> YandexMusicController.playWave(this)
             VoicePhrases.PHRASE_MUSIC_LIKES -> YandexMusicController.playLikes(this)
@@ -1441,6 +1559,79 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             VoicePhrases.PHRASE_MUSIC_OFF -> YandexMusicController.pause(this)
             VoicePhrases.PHRASE_MUSIC_NEXT -> YandexMusicController.next(this)
             VoicePhrases.PHRASE_MUSIC_PREV -> YandexMusicController.previous(this)
+            VoicePhrases.PHRASE_MUSIC_CONTINUE -> YandexMusicController.continuePlayback(this)
+        }
+
+        handler.removeCallbacks(resumeAfterActionRunnable)
+        handler.postDelayed(resumeAfterActionRunnable, POST_MATCH_RESTART_DELAY_MS)
+    }
+
+    // ------------------------------------------------------------------
+    // Call answer/decline dispatch (main thread)
+    // ------------------------------------------------------------------
+
+    /**
+     * Same launchInFlight guard as onMusicCommand() above, for the same
+     * partial+final double-match reason. The actual accept/decline is
+     * additionally gated on [callRinging] inside each action below — a
+     * match that lands just as the call stops ringing on its own must not
+     * act on whatever call (if any) is active afterward.
+     */
+    private fun onCallActionCommand(phrase: String) {
+        if (launchInFlight) return
+        launchInFlight = true
+
+        when (phrase) {
+            VoicePhrases.PHRASE_CALL_ANSWER -> answerRingingCall()
+            VoicePhrases.PHRASE_CALL_DECLINE -> declineRingingCall()
+        }
+
+        handler.removeCallbacks(resumeAfterActionRunnable)
+        handler.postDelayed(resumeAfterActionRunnable, POST_MATCH_RESTART_DELAY_MS)
+    }
+
+    /** "прими звонок" */
+    private fun answerRingingCall() {
+        if (!callRinging) return
+        if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "ANSWER_PHONE_CALLS not granted — cannot answer call")
+            return
+        }
+        val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager ?: return
+        try {
+            @Suppress("DEPRECATION")
+            telecomManager.acceptRingingCall()
+        } catch (e: Exception) {
+            Log.e(TAG, "acceptRingingCall failed", e)
+        }
+    }
+
+    /**
+     * "отклони звонок" — endCall() ends whatever call is currently active if
+     * none is ringing, so this only ever calls it while [callRinging] is
+     * still true (see that field's doc), and requires API 28+, where
+     * endCall() became public API (it's a system-only hidden call before
+     * that, unreachable from a third-party app on this project's minSdk 26).
+     */
+    private fun declineRingingCall() {
+        if (!callRinging) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            Log.e(TAG, "endCall() needs API 28+ — cannot decline a call on this OS version")
+            return
+        }
+        if (checkSelfPermission(android.Manifest.permission.ANSWER_PHONE_CALLS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "ANSWER_PHONE_CALLS not granted — cannot decline call")
+            return
+        }
+        val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager ?: return
+        try {
+            telecomManager.endCall()
+        } catch (e: Exception) {
+            Log.e(TAG, "endCall failed", e)
         }
     }
 

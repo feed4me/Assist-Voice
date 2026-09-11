@@ -123,10 +123,15 @@ object VoicePhrases {
     const val PHRASE_MUSIC_OFF = "выключи музыку"
     const val PHRASE_MUSIC_NEXT = "следующий трек"
     const val PHRASE_MUSIC_PREV = "предыдущий трек"
+    /** Unlike PHRASE_MUSIC_ON, this never touches YandexMusicWatch — always
+     * routed generically (see YandexMusicController.continuePlayback) to
+     * whatever currently holds media-button focus. */
+    const val PHRASE_MUSIC_CONTINUE = "продолжи воспроизведение"
 
     val MUSIC_PHRASES = listOf(
         PHRASE_MUSIC_WAVE, PHRASE_MUSIC_LIKES, PHRASE_MUSIC_ON,
-        PHRASE_MUSIC_OFF, PHRASE_MUSIC_NEXT, PHRASE_MUSIC_PREV
+        PHRASE_MUSIC_OFF, PHRASE_MUSIC_NEXT, PHRASE_MUSIC_PREV,
+        PHRASE_MUSIC_CONTINUE
     )
 
     /**
@@ -154,11 +159,14 @@ object VoicePhrases {
      * in that combined list drops ALL of them, not just its own phrase's,
      * so growing this list is a real tradeoff, not a free addition.
      *
-     * "вода"/"музей"/"чек"/"след"/"приду"/"любовь" are ordinary,
+     * "вода"/"музей"/"чек"/"след"/"приду"/"любовь"/"продавец" are ordinary,
      * high-frequency words rather than inflected forms of the target words
      * themselves — on a model this small, a common everyday word sharing
      * the target's opening/rhyme is a safer bet to actually be
-     * in-vocabulary than an exact but rarer case form.
+     * in-vocabulary than an exact but rarer case form. "воспроизведение"
+     * itself gets no decoys: it's long and distinctive enough on its own
+     * that the collision this whole mechanism guards against is far less
+     * likely for it than for a short, common prefix like "включи".
      */
     val DECOY_WORDS_MUSIC = listOf(
         "включи", "включить", "включил", "включу",
@@ -168,6 +176,41 @@ object VoicePhrases {
         "трека", "треки", "треком", "чек",
         "следующая", "следующее", "следующего", "след",
         "предыдущая", "предыдущее", "предыдущего", "приду",
-        "любимый", "любимая", "любимое", "любовь"
+        "любимый", "любимая", "любимое", "любовь",
+        "продолжи", "продолжить", "продолжил", "продавец"
+    )
+
+    // ------------------------------------------------------------------
+    // Incoming call answer/decline — see VoiceAccessibilityService's call
+    // handling section.
+    // ------------------------------------------------------------------
+
+    /**
+     * Same kind of fixed, non-slot reserved commands as the flashlight/music
+     * phrases above — always in the grammar, never a slot type or a settings
+     * screen. Unlike those, the action they trigger is itself gated on a
+     * call actually being in the CALL_STATE_RINGING state (see
+     * VoiceAccessibilityService.onCallAnswerCommand/onCallDeclineCommand) —
+     * recognizing the phrase and acting on it are deliberately separate,
+     * since ending a call that isn't ringing ends whatever call IS active.
+     */
+    const val PHRASE_CALL_ANSWER = "прими звонок"
+    const val PHRASE_CALL_DECLINE = "отклони звонок"
+
+    val CALL_ACTION_PHRASES = listOf(PHRASE_CALL_ANSWER, PHRASE_CALL_DECLINE)
+
+    /**
+     * Same reasoning as DECOY_WORDS_MUSIC: bare prefixes ("прими"/"отклони")
+     * so a truncated command has an exact one-word landing spot, plus
+     * siblings of the shared second word "звонок" (already itself in
+     * CALL_ACTION_PHRASES, so not repeated here) for the opposite gap.
+     * "привет" and "отмени" are common, high-frequency words standing in
+     * for "прими"/"отклони" themselves, same reasoning as "вода"/"музей"/
+     * etc. above. Not individually re-verified — same fallback safety net.
+     */
+    val DECOY_WORDS_CALL_ACTION = listOf(
+        "прими", "принять", "принял", "приму", "привет",
+        "отклони", "отклонить", "отклонил", "отклоню", "отмени",
+        "звонки", "звонком", "звоню", "звонкий"
     )
 }

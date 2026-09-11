@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- "прими звонок" / "отклони звонок" — TelecomManager.acceptRingingCall()
+         and endCall() (see VoiceAccessibilityService's call handling section). -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
     <!-- In-app update check/download (UpdateChecker, UpdateInstaller) and
          handing the downloaded APK to the system installer. -->

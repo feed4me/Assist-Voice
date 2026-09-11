@@ -28,7 +28,8 @@ import java.io.File
  * page (donation and social QR codes).
  *
  * Requests RECORD_AUDIO, then POST_NOTIFICATIONS + READ_CONTACTS + CALL_PHONE +
- * READ_PHONE_STATE, then SYSTEM_ALERT_WINDOW automatically on first open.
+ * READ_PHONE_STATE + ANSWER_PHONE_CALLS, then SYSTEM_ALERT_WINDOW automatically
+ * on first open.
  * POST_NOTIFICATIONS matters more than it looks: on API 33+ without it the
  * status notification never appears *and* the full-screen-intent fallback used
  * to launch apps when overlay permission is missing is silently dropped.
@@ -409,6 +410,9 @@ class MainActivity : AppCompatActivity() {
         if (!hasPermission(Manifest.permission.READ_PHONE_STATE)) {
             missing.add(Manifest.permission.READ_PHONE_STATE)
         }
+        if (!hasPermission(Manifest.permission.ANSWER_PHONE_CALLS)) {
+            missing.add(Manifest.permission.ANSWER_PHONE_CALLS)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
         ) {
@@ -470,14 +474,17 @@ class MainActivity : AppCompatActivity() {
         val accessibilityOn = isAccessibilityServiceEnabled()
         val micOk = hasMicPermission()
         val contactsOk = hasContactsPermission()
-        // Both matter for a CALL slot: CALL_PHONE places the call,
-        // READ_PHONE_STATE is what lets the call-state listener force a mic
-        // restart the instant a call ends (see registerCallStateListener) —
-        // without it the app falls back to a fixed delay only. A "Телефон"
-        // pill that only checked one of the two would read green while that
-        // fallback was silently in effect.
+        // All three matter for phone-related features: CALL_PHONE places a
+        // CALL slot's call, READ_PHONE_STATE is what lets the call-state
+        // listener force a mic restart the instant a call ends (see
+        // registerCallStateListener) and detect an incoming ring in the
+        // first place, and ANSWER_PHONE_CALLS is what lets "прими звонок"/
+        // "отклони звонок" actually do anything. A "Телефон" pill that only
+        // checked some of these would read green while one silently didn't
+        // work.
         val phoneOk = hasPermission(Manifest.permission.CALL_PHONE) &&
-            hasPermission(Manifest.permission.READ_PHONE_STATE)
+            hasPermission(Manifest.permission.READ_PHONE_STATE) &&
+            hasPermission(Manifest.permission.ANSWER_PHONE_CALLS)
         val overlayOk = hasOverlayPermission()
 
         return ServiceStatus(
