@@ -117,6 +117,7 @@ class MainActivity : AppCompatActivity() {
         loadPickerDataAsync()
         requestPermissionsIfNeeded()
         focusCurrentPage(pager.currentItem)
+        repairPackageInstallerIfNeeded()
     }
 
     override fun onStart() {
@@ -168,6 +169,38 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Обновляю списки приложений и контактов…", Toast.LENGTH_SHORT).show()
         PickerDataCache.invalidate()
         loadPickerDataAsync()
+    }
+
+    /**
+     * installOverAdb's own detached install chain (see AdbUpdateInstaller)
+     * re-enables the package installer after every update on its own; this
+     * is just the backstop for the rare case that gets interrupted (e.g.
+     * the watch rebooting mid-update) and it's left disabled.
+     *
+     * Gated on isReenablePending(): that's only true while an update this
+     * app itself triggered disabled the package installer and hasn't yet
+     * been confirmed to have put it back. Without that gate this would
+     * fight anyone who deliberately keeps it disabled themselves — on this
+     * firmware that's the only way to sideload APKs at all, since the
+     * normal system-installer path is blocked (see AdbUpdateInstaller's
+     * class doc) — by silently re-enabling it every time they open the app.
+     */
+    private fun repairPackageInstallerIfNeeded() {
+        if (!AdbUpdateInstaller.isReenablePending(this)) return
+        val disabled = try {
+            when (packageManager.getApplicationEnabledSetting("com.android.packageinstaller")) {
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER -> true
+                else -> false
+            }
+        } catch (e: IllegalArgumentException) {
+            false
+        }
+        if (disabled) {
+            AdbUpdateInstaller.ensurePackageInstallerEnabled(this)
+        } else {
+            AdbUpdateInstaller.clearReenablePending(this)
+        }
     }
 
     // ---- Updates ----

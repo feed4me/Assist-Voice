@@ -90,4 +90,84 @@ object VoicePhrases {
     const val PHRASE_FLASHLIGHT_OFF = "выключи фонарик"
 
     val FLASHLIGHT_PHRASES = listOf(PHRASE_FLASHLIGHT_ON, PHRASE_FLASHLIGHT_OFF)
+
+    /**
+     * Decoy for PHRASE_FLASHLIGHT_ON/OFF's fixed second word — same purpose
+     * as DECOY_WORDS_MUSIC below (a landing spot for audio that resembles
+     * "фонарик" without a clearly-heard "включи"/"выключи" in front of it),
+     * kept separate since the flashlight phrases don't share this word with
+     * anything else. "форточка" is a common, everyday word sharing
+     * "фонарик"'s opening sound — on a model this small, an ordinary
+     * high-frequency word is a safer bet to actually be in-vocabulary than
+     * an exact inflected form of the target word itself. Not individually
+     * re-verified — see DECOY_WORDS_MUSIC's doc for the fallback this
+     * relies on.
+     */
+    val DECOY_WORDS_FLASHLIGHT = listOf("фонарика", "фонарики", "фонариком", "форточка")
+
+    // ------------------------------------------------------------------
+    // YandexMusicWatch playback control — see YandexMusicController.
+    // ------------------------------------------------------------------
+
+    /**
+     * Same kind of fixed, non-slot reserved commands as the flashlight
+     * phrases above — folded into every grammar build unconditionally (see
+     * VoiceAccessibilityService.ensureRecognizer), never exposed as a slot
+     * type or a settings screen.
+     */
+    const val PHRASE_MUSIC_WAVE = "включи волну"
+    const val PHRASE_MUSIC_LIKES = "включи любимую музыку"
+    /** No target section — just resumes whatever was last playing (or
+     * starts the wave if nothing was), via YandexMusicController.resume(). */
+    const val PHRASE_MUSIC_ON = "включи музыку"
+    const val PHRASE_MUSIC_OFF = "выключи музыку"
+    const val PHRASE_MUSIC_NEXT = "следующий трек"
+    const val PHRASE_MUSIC_PREV = "предыдущий трек"
+
+    val MUSIC_PHRASES = listOf(
+        PHRASE_MUSIC_WAVE, PHRASE_MUSIC_LIKES, PHRASE_MUSIC_ON,
+        PHRASE_MUSIC_OFF, PHRASE_MUSIC_NEXT, PHRASE_MUSIC_PREV
+    )
+
+    /**
+     * Decoy words for every fixed word in MUSIC_PHRASES — both the
+     * "включи"/"выключи" prefixes (shared with PHRASE_FLASHLIGHT_ON/OFF)
+     * and each phrase's fixed second word. Same purpose as
+     * DECOY_WORDS_LAUNCH_APP/CALL: without these, ambiguous audio that only
+     * resembles one of these words has nowhere cheap to land, so a closed
+     * grammar tends to force it onto a full real command instead (this is
+     * why plain "включи", said alone, used to snap onto "включи фонарик" —
+     * there was no decoy list for this prefix family at all). The prefixes
+     * are included bare, unlike the open/call decoy lists, specifically to
+     * give a truncated "включи"/"выключи" with nothing (or noise) after it
+     * an exact one-word match instead of forcing the decoder to invent a
+     * second word from that noise; the second-word entries cover the
+     * opposite gap — audio that only clearly resembles "волну"/"музыку"/
+     * etc. without a clearly-heard prefix in front of it.
+     *
+     * Not individually re-verified against vosk-model-small-ru-0.22's
+     * vocabulary (see VoicePhrases' class doc) — a wrong guess here just
+     * falls back to the decoy-free grammar, same safety net as the others.
+     * Worth noting: DECOY_WORDS_LAUNCH_APP/CALL/MUSIC/FLASHLIGHT are all
+     * tried together as one combined list (see
+     * VoiceAccessibilityService.ensureRecognizer) — one bad word anywhere
+     * in that combined list drops ALL of them, not just its own phrase's,
+     * so growing this list is a real tradeoff, not a free addition.
+     *
+     * "вода"/"музей"/"чек"/"след"/"приду"/"любовь" are ordinary,
+     * high-frequency words rather than inflected forms of the target words
+     * themselves — on a model this small, a common everyday word sharing
+     * the target's opening/rhyme is a safer bet to actually be
+     * in-vocabulary than an exact but rarer case form.
+     */
+    val DECOY_WORDS_MUSIC = listOf(
+        "включи", "включить", "включил", "включу",
+        "выключи", "выключить", "выключил", "выключу",
+        "волна", "волны", "волной", "вода",
+        "музыка", "музыки", "музыкой", "музей",
+        "трека", "треки", "треком", "чек",
+        "следующая", "следующее", "следующего", "след",
+        "предыдущая", "предыдущее", "предыдущего", "приду",
+        "любимый", "любимая", "любимое", "любовь"
+    )
 }
