@@ -30,6 +30,18 @@
         <item name="android:seekBarStyle">@style/Widget.App.SeekBar</item>
     </style>
 
+    <!-- Full-screen white "flashlight" window — see FlashlightActivity. No
+         action bar, no title, no window content overlay: the requirement is
+         a screen with not a single UI element on it, so there is nothing
+         here beyond making the window itself take the whole screen. -->
+    <style name="Theme.Flashlight" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowIsTranslucent">false</item>
+    </style>
+
     <!-- ===== Text ===== -->
 
     <!-- Bare base for the TextAppearance.App.* family below. Every child

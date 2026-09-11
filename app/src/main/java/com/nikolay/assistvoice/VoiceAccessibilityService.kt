@@ -60,6 +60,16 @@ import org.vosk.android.StorageService
  * word loop whose search beam stays wide however the vocabulary is sized,
  * while the acoustic forward pass costs the same either way. Vocabulary size
  * is not the lever; frames-fed-to-the-decoder is.
+ *
+ * ## The screen "flashlight"
+ *
+ * "включи фонарик" / "выключи фонарик" (VoicePhrases.FLASHLIGHT_PHRASES) are
+ * two more reserved two-word phrases folded into the same grammar, but
+ * outside the slot mechanism entirely: not configurable, not shown in any
+ * settings screen, always present regardless of what slots exist. See
+ * ensureRecognizer() for how they're added to the grammar and
+ * handleHypothesis() for how they're matched ahead of, and independently of,
+ * user slots; FlashlightController and FlashlightActivity for what they do.
  */
 class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink {
 
@@ -166,6 +176,14 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
          * return to the watch face clears it.
          */
         private const val AWAY_FROM_WATCH_FACE_MARKER = "<away-from-watch-face>"
+
+        /**
+         * Arbitrary, fixed request code for the flashlight's launch-fallback
+         * notification (see VoiceNotifications.postLaunchFallback) — slots use
+         * their own slot.id.hashCode() as this app never has more than one
+         * flashlight window, so one constant is enough here.
+         */
+        private const val FLASHLIGHT_NOTIFICATION_REQUEST_CODE = -1001
     }
 
     // ---- Vosk state ----
@@ -452,25 +470,25 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
 
     private fun refreshSlotCache() {
         cachedSlots = TargetAppPrefs.getSlots(this)
-        val hadActive = activeSlots.isNotEmpty()
         val previousPhrases = activePhrases
 
         activeSlots = cachedSlots.filter { it.enabled && it.wakeWord.isNotBlank() }
         activePhrases = activeSlots.map { VoicePhrases.phraseFor(it) }
         val phrasesChanged = activePhrases != previousPhrases
 
-        // The grammar is built entirely from these phrases, so a changed set
-        // means the decoding graph is stale, not just the status text.
-        if (activeSlots.isEmpty() && hadActive) {
-            stopListening()
-        } else if (activeSlots.isNotEmpty() && !hadActive && screenOn) {
-            startListening()
-        } else if (phrasesChanged && isListening) {
+        // The grammar is built from these phrases plus the fixed flashlight
+        // phrases (see ensureRecognizer), so a changed set means the decoding
+        // graph is stale, not just the status text. Listening is never gated
+        // on activeSlots being non-empty any more — "включи/выключи фонарик"
+        // must keep working even with zero configured slots.
+        if (phrasesChanged && isListening) {
             stopListening(updateStatus = false)
             releaseRecognizer()
             if (screenOn) startListening()
         } else if (isListening) {
             postStatus(listeningStatusText())
+        } else if (screenOn && isOnWatchFace()) {
+            startListening()
         }
     }
 
@@ -844,12 +862,6 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         if (isListening) return
         if (model == null) return // loadModel's callback will call back in
 
-        if (activeSlots.isEmpty()) {
-            // Nothing to listen for — don't burn the mic or the CPU.
-            MicForegroundService.stop(this)
-            postStatus("Нет активных команд")
-            return
-        }
         if (!isOnWatchFace()) {
             postStatus("Ждёт циферблата")
             return
@@ -876,7 +888,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
      * callback.
      */
     private fun beginCapture() {
-        if (isListening || !screenOn || model == null || activeSlots.isEmpty()) return
+        if (isListening || !screenOn || model == null) return
         if (!isOnWatchFace()) return
 
         // The overlay goes up BEFORE the microphone is probed, not after it
@@ -1021,7 +1033,11 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
      */
     private fun ensureRecognizer(): Recognizer? {
         val currentModel = model ?: return null
-        val phrases = activePhrases.filter { it.isNotBlank() }.distinct()
+        // The two flashlight phrases are folded in unconditionally — they are
+        // reserved commands outside the slot mechanism entirely (see
+        // VoicePhrases), always active regardless of what slots exist.
+        val phrases = (activePhrases.filter { it.isNotBlank() } + VoicePhrases.FLASHLIGHT_PHRASES)
+            .distinct()
         val key = phrases.joinToString("|")
 
         recognizer?.let { existing ->
@@ -1220,15 +1236,29 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
 
         val phrases = activePhrases
         val slots = activeSlots
+        // Read once: this flips on the main thread, and every branch below
+        // must act on one consistent snapshot rather than possibly changing
+        // mid-decision.
+        val flashlightShowing = FlashlightController.isShowing
 
         // Fast reject before touching JSON at all: phrases are lowercase and
         // Vosk emits lowercase Russian, so a raw substring scan rules out the
         // overwhelming majority of emissions without allocating anything.
-        var candidate = false
-        for (phrase in phrases) {
-            if (phrase.isNotEmpty() && hypothesisJson.contains(phrase)) {
+        // "выключи фонарик" is checked unconditionally; the rest of the
+        // grammar (slots, "включи фонарик") only matters when the flashlight
+        // screen isn't already showing — see the flashlightShowing branch
+        // below for why.
+        var candidate = hypothesisJson.contains(VoicePhrases.PHRASE_FLASHLIGHT_OFF)
+        if (!candidate && !flashlightShowing) {
+            if (hypothesisJson.contains(VoicePhrases.PHRASE_FLASHLIGHT_ON)) {
                 candidate = true
-                break
+            } else {
+                for (phrase in phrases) {
+                    if (phrase.isNotEmpty() && hypothesisJson.contains(phrase)) {
+                        candidate = true
+                        break
+                    }
+                }
             }
         }
         if (!candidate) {
@@ -1245,6 +1275,27 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             return
         }
         if (text.isEmpty()) return
+
+        if (containsWholePhrase(text, VoicePhrases.PHRASE_FLASHLIGHT_OFF)) {
+            Log.i(TAG, "Match: heard «$text» → ${VoicePhrases.PHRASE_FLASHLIGHT_OFF} (final=$final)")
+            if (final) logFinalForCalibration(hypothesisJson)
+            handler.post { onFlashlightOffCommand() }
+            return
+        }
+
+        if (flashlightShowing) {
+            // Per spec, while the white screen is up we listen for nothing
+            // else — not "включи фонарик" again, not any slot — only the tap
+            // and "выключи фонарик" above can close it.
+            return
+        }
+
+        if (containsWholePhrase(text, VoicePhrases.PHRASE_FLASHLIGHT_ON)) {
+            Log.i(TAG, "Match: heard «$text» → ${VoicePhrases.PHRASE_FLASHLIGHT_ON} (final=$final)")
+            if (final) logFinalForCalibration(hypothesisJson)
+            handler.post { onFlashlightOnCommand() }
+            return
+        }
 
         val matchedIndex = phrases.indexOfFirst {
             it.isNotEmpty() && containsWholePhrase(text, it)
@@ -1307,6 +1358,39 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             index = text.indexOf(phrase, index + 1)
         }
         return false
+    }
+
+    // ------------------------------------------------------------------
+    // Flashlight command dispatch (main thread)
+    // ------------------------------------------------------------------
+
+    /**
+     * Unlike onCommandDetected() below, this deliberately does NOT touch the
+     * microphone, the overlay, or foregroundPackage: FlashlightActivity opens
+     * in our own package, which onAccessibilityEvent already ignores (see its
+     * `pkg == packageName` check), so none of the watch-face/leave-watch-face
+     * bookkeeping that a LAUNCH_APP/CALL slot needs applies here — capture
+     * just keeps running underneath it exactly as it was.
+     */
+    private fun onFlashlightOnCommand() {
+        if (FlashlightController.isShowing) return
+        val intent = Intent(this, FlashlightActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (Settings.canDrawOverlays(this)) {
+            try {
+                startActivity(intent)
+                return
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start FlashlightActivity, falling back to notification", e)
+            }
+        }
+        VoiceNotifications.postLaunchFallback(
+            this, intent, "Фонарик…", FLASHLIGHT_NOTIFICATION_REQUEST_CODE
+        )
+    }
+
+    private fun onFlashlightOffCommand() {
+        FlashlightController.requestClose()
     }
 
     // ------------------------------------------------------------------
