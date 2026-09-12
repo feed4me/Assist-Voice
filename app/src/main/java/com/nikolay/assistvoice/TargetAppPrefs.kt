@@ -7,39 +7,42 @@ import java.util.UUID
 
 /**
  * Stores the list of voice-trigger slots as JSON in SharedPreferences.
- * Defaults to a single slot pre-filled for stock Yandex Browser's
- * voice assistant (LAUNCH_APP, intentAction = ACTION_ASSIST — the
- * only slot that ever ships with that value; every other/new slot
- * defaults to plain ACTION_MAIN, see VoiceSlot's doc).
+ * Starts empty — every slot is hand-added through the "Команды" screen.
  */
 object TargetAppPrefs {
 
     const val PREFS_NAME = "target_app"
     private const val KEY_SLOTS = "slots_json"
+    private const val KEY_VIBRATE_ON_COMMAND = "vibrate_on_command"
+    private const val KEY_LISTEN_EVERYWHERE = "listen_everywhere"
 
-    const val DEFAULT_PACKAGE = "com.yandex.browser"
-    const val DEFAULT_ACTIVITY = "com.yandex.browser.YandexBrowserMainActivity"
     const val DEFAULT_WAKE_WORD = "алиса"
     const val DEFAULT_INTENT_ACTION = "android.intent.action.MAIN"
     const val ASSIST_INTENT_ACTION = "android.intent.action.ASSIST"
 
+    /** Short haptic feedback the instant a voice command is recognized — see
+     * VoiceAccessibilityService.vibrateOnCommandMatch(). On by default. */
+    fun isVibrateOnCommandEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_VIBRATE_ON_COMMAND, true)
+
+    fun saveVibrateOnCommand(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_VIBRATE_ON_COMMAND, enabled).apply()
+    }
+
+    /** Off by default: the mic only listens on the watch face (see
+     * VoiceAccessibilityService.isOnWatchFace() and its WATCH_FACE_PACKAGES/
+     * WEAR_OS_SYSUI_CLASS_NAME). On, it listens with any app in the
+     * foreground — the escape hatch for a watch whose home-screen package
+     * this app doesn't recognize. */
+    fun isListenEverywhereEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_LISTEN_EVERYWHERE, false)
+
+    fun saveListenEverywhere(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_LISTEN_EVERYWHERE, enabled).apply()
+    }
+
     fun getSlots(context: Context): List<VoiceSlot> {
-        val json = prefs(context).getString(KEY_SLOTS, null)
-        if (json == null) {
-            val initial = listOf(
-                VoiceSlot(
-                    id = UUID.randomUUID().toString(),
-                    enabled = true,
-                    actionType = SlotActionType.LAUNCH_APP,
-                    wakeWord = DEFAULT_WAKE_WORD,
-                    packageName = DEFAULT_PACKAGE,
-                    activityName = DEFAULT_ACTIVITY,
-                    intentAction = ASSIST_INTENT_ACTION
-                )
-            )
-            saveSlots(context, initial)
-            return initial
-        }
+        val json = prefs(context).getString(KEY_SLOTS, null) ?: return emptyList()
         return parseSlots(json)
     }
 
@@ -71,9 +74,8 @@ object TargetAppPrefs {
                 enabled = true,
                 actionType = SlotActionType.LAUNCH_APP
                 // intentAction defaults to DEFAULT_INTENT_ACTION (plain
-                // ACTION_MAIN) — only the pre-filled Yandex Browser slot
-                // ever gets ACTION_ASSIST, set above in getSlots()'s
-                // first-run seeding.
+                // ACTION_MAIN); ASSIST_INTENT_ACTION is only ever picked
+                // explicitly for a slot that needs it via SlotEditActivity.
             )
         )
         saveSlots(context, slots)

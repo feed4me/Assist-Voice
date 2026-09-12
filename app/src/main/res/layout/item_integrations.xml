@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FrameLayout wrapper + scrollIndicator: see CurvedScrollIndicatorView's
+     doc comment. scrollRoot's own android:scrollbars is "none" — the
+     indicator draws over it instead of the platform's own (unreliable on
+     this ROM) round scrollbar. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none"
+    android:clipToPadding="false"
+    android:paddingLeft="@dimen/screen_padding_h"
+    android:paddingRight="@dimen/screen_padding_h"
+    android:paddingTop="@dimen/screen_padding_v"
+    android:paddingBottom="@dimen/screen_padding_v">
+
+    <!-- paddingTop/paddingBottom here (stacking with the ScrollView's own
+         screen_padding_v) give round-bezel clearance — matters more once
+         a second integration tile makes this page tall enough to scroll. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingTop="@dimen/scroll_bottom_extra"
+        android:paddingBottom="@dimen/scroll_bottom_extra">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.App.Label"
+            android:text="Интеграции"
+            android:layout_marginBottom="@dimen/space_s" />
+
+        <!-- One tile per third-party integration — currently just Yandex
+             Smart Home; a second service gets its own tile here, not a
+             generic list-driven layout (see IntegrationsViewHolder's doc).
+             The ripple/click surface is the inner LinearLayout, not this
+             outer card — same split as item_slot_row.xml's rowBody, so the
+             ripple stays inside the card's rounded corners. -->
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_m">
+
+            <LinearLayout
+                android:id="@+id/yandexSmartHomeTile"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal"
+                    android:textAppearance="@style/TextAppearance.App.RowTitle"
+                    android:textSize="12sp"
+                    android:text="Умный дом Яндекса" />
+
+                <TextView
+                    android:id="@+id/yandexSmartHomeSubtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"
+                    android:textAppearance="@style/TextAppearance.App.Hint"
+                    android:text="" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Large tier (~380dp+ round screens) — linearly scaled from the verified
+     w320dp values (1.1875x), not independently confirmed on real hardware
+     this size. See the base values/dimens.xml for the full tiering
+     rationale and the caveat on scroll_bottom_extra specifically. -->
+<resources>
+
+    <dimen name="screen_padding_h">26dp</dimen>
+    <dimen name="screen_padding_v">36dp</dimen>
+
+    <dimen name="scroll_bottom_extra">33dp</dimen>
+
+    <dimen name="start_logo_size">86dp</dimen>
+
+    <dimen name="space_xs">5dp</dimen>
+    <dimen name="space_s">10dp</dimen>
+    <dimen name="space_m">14dp</dimen>
+    <dimen name="space_l">21dp</dimen>
+    <dimen name="space_xl">31dp</dimen>
+
+    <dimen name="card_radius">21dp</dimen>
+    <dimen name="button_radius">26dp</dimen>
+    <dimen name="input_radius">14dp</dimen>
+
+</resources>

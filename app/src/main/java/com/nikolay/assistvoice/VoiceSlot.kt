@@ -22,9 +22,7 @@ enum class SlotActionType {
  *   `intentAction` is a free-text Intent Action string (e.g.
  *   "android.intent.action.MAIN" or "android.intent.action.ASSIST") —
  *   editable on every slot. It defaults to plain ACTION_MAIN for new
- *   slots; only the pre-filled Yandex Browser default slot ships with
- *   it set to ACTION_ASSIST (set once at creation time in
- *   TargetAppPrefs' first-run seeding, not otherwise special-cased).
+ *   slots; ACTION_ASSIST is only ever set by hand, when a target needs it.
  *   A free-text field was used instead of a dropdown because Android's
  *   PackageManager has no API to enumerate which actions a given
  *   component supports — only to check one specific action at a time.

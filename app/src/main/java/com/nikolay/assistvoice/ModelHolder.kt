@@ -15,8 +15,8 @@ import org.vosk.Model
  * a close can never overlap a lookup. Callers that find nothing here (service
  * not running) load their own short-lived copy — see WakeWordDictionary.
  *
- * Lookups are microseconds; recognizer construction is the one genuinely slow
- * thing done under this lock, and it only happens when the grammar changes.
+ * Lookups are microseconds; a model close is the one genuinely slow thing
+ * that can happen under this lock, and it's rare (only on teardown).
  */
 object ModelHolder {
 

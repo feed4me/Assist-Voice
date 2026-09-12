@@ -30,6 +30,19 @@
         <item name="android:seekBarStyle">@style/Widget.App.SeekBar</item>
     </style>
 
+    <!-- AlertDialog theme matching the app's own dark card look — plain
+         AlertDialog.Builder(this) otherwise falls back to AppCompat's
+         default light dialog chrome (white background, black text), which
+         reads as a jarring "system" popup against this app's dark,
+         rounded-card design everywhere else. Used by MainActivity's ADB
+         dialogs (showEnableWirelessDebuggingDialog, showAdbPairingDialog). -->
+    <style name="AppDialogTheme" parent="Theme.AppCompat.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/bg_card</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="colorAccent">@color/accent</item>
+    </style>
+
     <!-- Full-screen white "flashlight" window — see FlashlightActivity. No
          action bar, no title, no window content overlay: the requirement is
          a screen with not a single UI element on it, so there is nothing
@@ -154,9 +167,20 @@
         <item name="android:textColor">@color/text_primary</item>
     </style>
 
+    <!-- Also doubles as the "off" side of a smart-home command's two fixed
+         save buttons (see Widget.App.Button.Success below for "on") —
+         same red used for a destructive delete reads just as well as a
+         plain, calm "off" state. -->
     <style name="Widget.App.Button.Danger">
         <item name="android:background">@drawable/bg_button_danger</item>
-        <item name="android:textColor">@color/danger</item>
+        <item name="android:textColor">@color/btn_danger_text</item>
+    </style>
+
+    <!-- "On" side of a smart-home command's two fixed save buttons — see
+         SmartHomeDeviceCommandsActivity. -->
+    <style name="Widget.App.Button.Success">
+        <item name="android:background">@drawable/bg_button_success</item>
+        <item name="android:textColor">@color/btn_success_text</item>
     </style>
 
     <!-- ===== Inputs ===== -->

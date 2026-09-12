@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mid-size tier (~280dp round screens) — linearly scaled from the
+     verified w320dp values (0.875x), not independently confirmed on real
+     hardware this size. See the base values/dimens.xml for the full
+     tiering rationale and the caveat on scroll_bottom_extra specifically. -->
+<resources>
+
+    <dimen name="screen_padding_h">19dp</dimen>
+    <dimen name="screen_padding_v">26dp</dimen>
+
+    <dimen name="scroll_bottom_extra">24dp</dimen>
+
+    <dimen name="start_logo_size">63dp</dimen>
+
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_s">7dp</dimen>
+    <dimen name="space_m">10dp</dimen>
+    <dimen name="space_l">16dp</dimen>
+    <dimen name="space_xl">23dp</dimen>
+
+    <dimen name="card_radius">16dp</dimen>
+    <dimen name="button_radius">19dp</dimen>
+    <dimen name="input_radius">10dp</dimen>
+
+</resources>

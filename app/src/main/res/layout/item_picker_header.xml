@@ -4,12 +4,17 @@
      one full-screen view (match_parent x match_parent, no siblings taking
      up space) — see item_picker.xml's comment and SlotsAdapter's
      awakenScrollBarsMethod doc for why that's what makes the round
-     scrollbar draw correctly on this ROM. -->
+     scrollbar draw correctly on this ROM.
+     paddingTop is round-bezel clearance (stacks with pickerRecycler's own
+     paddingTop) — the header is always position 0, so it's always the
+     thing that would otherwise sit right at the top curve, same reasoning
+     as item_smart_home_list_header.xml. -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/headerTitle"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="center"
     android:textAppearance="@style/TextAppearance.App.Label"
+    android:paddingTop="@dimen/scroll_bottom_extra"
     android:paddingBottom="@dimen/space_s"
     android:text="" />

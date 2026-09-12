@@ -1,13 +1,11 @@
 package com.nikolay.assistvoice
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.text.InputType
 import android.text.TextUtils
@@ -22,23 +20,28 @@ import java.io.File
 
 /**
  * Settings screen: a horizontally swipeable ViewPager2 with 5 fixed pages —
- * info (service status + repo QR code), the slot list (add button plus one
- * row per voice command, tap a row to edit it in SlotEditActivity),
- * microphone-gate (VAD) tuning, mic-icon appearance, then a closing support
- * page (donation and social QR codes).
+ * info (one status pill + repo QR code + update/permission buttons), the
+ * slot list (add button plus one row per voice command, tap a row to edit
+ * it in SlotEditActivity), microphone-gate (VAD) tuning, mic-icon appearance,
+ * then a closing support page (donation and social QR codes).
  *
- * Requests RECORD_AUDIO, then POST_NOTIFICATIONS + READ_CONTACTS + CALL_PHONE +
- * READ_PHONE_STATE + ANSWER_PHONE_CALLS, then SYSTEM_ALERT_WINDOW automatically
- * on first open.
- * POST_NOTIFICATIONS matters more than it looks: on API 33+ without it the
- * status notification never appears *and* the full-screen-intent fallback used
- * to launch apps when overlay permission is missing is silently dropped.
+ * Nothing is requested automatically on open, and nothing on the info page
+ * is individually tappable — a single non-interactive status pill just
+ * reads "Не все разрешения предоставлены" (warm) or "Все разрешения
+ * предоставлены" (green), recomputed fresh on every bind (buildStatus()).
+ * "Выдать разрешения" below it is the one and only way to grant anything:
+ * connects over ADB (AdbUpdateInstaller.grantPermissions()) and requests
+ * every permission this app uses at once, including ones whose normal
+ * on-screen flow can be blocked on some firmware — SYSTEM_ALERT_WINDOW's
+ * Settings screen reported "Unavailable" on a Samsung Galaxy Watch, and
+ * this app's own Accessibility/Battery screens aren't exported on this
+ * Huawei build. It has no separate readout of its own: the pill above just
+ * refreshes afterward and turns green once everything actually stuck.
  *
- * The actual listening logic lives in VoiceAccessibilityService, which Android
- * does not allow an app to enable programmatically — the person must turn it on
- * manually in system Settings → Accessibility. There are deliberately no
- * deep-link buttons to the Accessibility/Battery settings screens: on this
- * Huawei/EMUI build those screens are not exported.
+ * The actual listening logic lives in VoiceAccessibilityService, which
+ * Android does not allow an app to enable programmatically — the person
+ * must turn it on manually in system Settings → Accessibility, or via
+ * "Выдать разрешения" above.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -65,22 +68,14 @@ class MainActivity : AppCompatActivity() {
      * UpdateInstaller and SlotsAdapter.InfoViewHolder.bindUpdateSection(). */
     private var updateStatus: UpdateStatus = UpdateStatus.Idle
 
+    /** True while a "Выдать разрешения" ADB attempt is in flight — see
+     * onGrantPermissionsButtonClicked()/handleGrantResult() and
+     * SlotsAdapter.InfoViewHolder.bindGrantPermissionsSection(). Only ever
+     * changes the button's own enabled state/text; success or failure is
+     * reflected by the status pill refreshing, not by a separate readout. */
+    private var isGrantingPermissions: Boolean = false
+
     private val mainHandler = Handler(Looper.getMainLooper())
-
-    private val requestMicPermissionLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-    ) { _ ->
-        adapter.refreshInfoPage()
-        requestSecondaryPermissionsIfNeeded()
-    }
-
-    private val requestSecondaryPermissionsLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ ->
-        adapter.refreshInfoPage()
-        loadPickerDataAsync()
-        requestOverlayPermissionIfNeeded()
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,7 +90,10 @@ class MainActivity : AppCompatActivity() {
             onSlotsChanged = { refreshSlots() },
             onSyncPickerData = { syncPickerData() },
             getUpdateStatus = { updateStatus },
-            onUpdateButtonClicked = { onUpdateButtonClicked() }
+            onUpdateButtonClicked = { onUpdateButtonClicked() },
+            isGrantingPermissions = { isGrantingPermissions },
+            onGrantPermissionsButtonClicked = { onGrantPermissionsButtonClicked() },
+            onOpenYandexSmartHome = { openYandexSmartHome() }
         )
         pager.adapter = adapter
         // Default RecyclerView change-animation (a cross-fade/translate on
@@ -116,7 +114,6 @@ class MainActivity : AppCompatActivity() {
 
         refreshSlots()
         loadPickerDataAsync()
-        requestPermissionsIfNeeded()
         focusCurrentPage(pager.currentItem)
         repairPackageInstallerIfNeeded()
     }
@@ -135,6 +132,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         refreshSlots()
         adapter.refreshInfoPage()
+        adapter.refreshIntegrationsPage()
     }
 
     override fun onDestroy() {
@@ -270,8 +268,23 @@ class MainActivity : AppCompatActivity() {
      * this firmware. If nothing is reachable (Wireless debugging is off),
      * tells the person what to enable; if a pairing screen is open on the
      * watch, asks for its code once.
+     *
+     * Every other manufacturer installs the normal way instead
+     * (UpdateInstaller.promptInstall() — hands the APK straight to the
+     * system installer via FileProvider) — confirmed on Samsung that this
+     * just works, no ADB involved at all. promptInstall() has no
+     * success/failure callback of its own (Android gives none for "the
+     * person accepted the install dialog"), so the status just stays
+     * ReadyToInstall either way and the person can tap "Установить" again
+     * if it didn't actually go through.
      */
     private fun installUpdate(info: UpdateInfo, apkFile: File) {
+        if (!AdbUpdateInstaller.isHuawei()) {
+            UpdateInstaller.promptInstall(this, apkFile)
+            updateStatus = UpdateStatus.ReadyToInstall(info, apkFile)
+            adapter.refreshInfoPage()
+            return
+        }
         updateStatus = UpdateStatus.Installing(info, apkFile, "Подключаюсь по ADB…")
         adapter.refreshInfoPage()
         AdbUpdateInstaller.tryInstall(this, apkFile) { result ->
@@ -290,7 +303,20 @@ class MainActivity : AppCompatActivity() {
             is AdbUpdateInstaller.Result.NeedsPairing -> {
                 updateStatus = UpdateStatus.ReadyToInstall(info, apkFile)
                 adapter.refreshInfoPage()
-                showPairingDialog(result.port, info, apkFile)
+                showAdbPairingDialog(
+                    onCode = { code ->
+                        updateStatus = UpdateStatus.Installing(info, apkFile, "Привязываю и подключаюсь…")
+                        adapter.refreshInfoPage()
+                        AdbUpdateInstaller.pairAndInstall(this, result.host, result.port, code, apkFile) { r ->
+                            if (isFinishing || isDestroyed) return@pairAndInstall
+                            handleAdbResult(r, info, apkFile)
+                        }
+                    },
+                    onCancelled = {
+                        updateStatus = UpdateStatus.ReadyToInstall(info, apkFile)
+                        adapter.refreshInfoPage()
+                    }
+                )
             }
             is AdbUpdateInstaller.Result.NotAvailable -> {
                 updateStatus = UpdateStatus.ReadyToInstall(info, apkFile)
@@ -305,17 +331,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Shared by the update-install and "Выдать разрешения" ADB flows (see
+     * handleAdbResult and handleGrantResult) — kept deliberately generic
+     * (no mention of which button to press) so neither caller's wording
+     * goes stale for the other.
+     */
     private fun showEnableWirelessDebuggingDialog() {
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.AppDialogTheme)
             .setTitle("Нужна отладка по Wi-Fi")
             .setMessage(
-                "Обычная установка на этой прошивке заблокирована, поэтому " +
-                    "обновление ставится через отладку по Wi-Fi.\n\n" +
-                    "Настройки → Система → Для разработчиков → " +
-                    "«Отладка по Wi-Fi» — включи её, затем нажми «Установить» ещё раз.\n\n" +
-                    "Если пункта «Для разработчиков» нет, сначала открой " +
-                    "О часах и несколько раз нажми на номер сборки, пока не " +
-                    "появится сообщение, что режим разработчика включён."
+                "Для разработчиков → «Отладка по Wi-Fi» — включи её и попробуй ещё раз."
             )
             .setPositiveButton("Понятно", null)
             .show()
@@ -326,14 +352,18 @@ class MainActivity : AppCompatActivity() {
      * device with pairing code" service running (i.e. Wireless debugging is
      * on and the person has that screen open on the watch, showing a
      * 6-digit code). Plain AlertDialog + EditText rather than a separate
-     * Activity — this only ever happens once per factory reset.
+     * Activity — this only ever happens once per factory reset. Shared
+     * between the update-install and the permission-grant ADB flows (see
+     * handleAdbResult and handleGrantResult) — the only difference between
+     * them is what happens once a code is entered or the dialog is
+     * cancelled, left entirely to the caller.
      */
-    private fun showPairingDialog(port: Int, info: UpdateInfo, apkFile: File) {
+    private fun showAdbPairingDialog(onCode: (String) -> Unit, onCancelled: () -> Unit) {
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_NUMBER
             hint = "6-значный код"
         }
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.AppDialogTheme)
             .setTitle("Привязка по коду")
             .setMessage(
                 "На часах открыт экран «Подключить устройство по коду» — " +
@@ -346,23 +376,89 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Код не введён", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                updateStatus = UpdateStatus.Installing(info, apkFile, "Привязываю и подключаюсь…")
-                adapter.refreshInfoPage()
-                AdbUpdateInstaller.pairAndInstall(this, port, code, apkFile) { result ->
-                    if (isFinishing || isDestroyed) return@pairAndInstall
-                    handleAdbResult(result, info, apkFile)
-                }
+                onCode(code)
             }
-            .setNegativeButton("Отмена") { _, _ ->
-                updateStatus = UpdateStatus.ReadyToInstall(info, apkFile)
-                adapter.refreshInfoPage()
-            }
+            .setNegativeButton("Отмена") { _, _ -> onCancelled() }
             .show()
+    }
+
+    /**
+     * "Выдать разрешения" on the info page — connects over ADB
+     * the same way installUpdate does and grants everything AdbUpdateInstaller
+     * .grantPermissions() covers (SYSTEM_ALERT_WINDOW, REQUEST_INSTALL_PACKAGES,
+     * battery whitelist, the accessibility service, the ordinary runtime
+     * permissions), for firmware where the corresponding on-screen flow is
+     * blocked. Same NeedsPairing/NotAvailable fallback as an update install.
+     * Never shows its own success/failure readout — the status pill above
+     * just refreshes afterward and reflects the truth on its own.
+     */
+    private fun onGrantPermissionsButtonClicked() {
+        isGrantingPermissions = true
+        adapter.refreshInfoPage()
+        AdbUpdateInstaller.grantPermissions(this) { result ->
+            if (isFinishing || isDestroyed) return@grantPermissions
+            handleGrantResult(result)
+        }
+    }
+
+    private fun handleGrantResult(result: AdbUpdateInstaller.GrantResult) {
+        when (result) {
+            is AdbUpdateInstaller.GrantResult.Success -> {
+                isGrantingPermissions = false
+                adapter.refreshInfoPage()
+                loadPickerDataAsync()
+            }
+            is AdbUpdateInstaller.GrantResult.NeedsPairing -> {
+                isGrantingPermissions = false
+                adapter.refreshInfoPage()
+                showAdbPairingDialog(
+                    onCode = { code ->
+                        isGrantingPermissions = true
+                        adapter.refreshInfoPage()
+                        AdbUpdateInstaller.pairAndGrantPermissions(this, result.host, result.port, code) { r ->
+                            if (isFinishing || isDestroyed) return@pairAndGrantPermissions
+                            handleGrantResult(r)
+                        }
+                    },
+                    onCancelled = {
+                        isGrantingPermissions = false
+                        adapter.refreshInfoPage()
+                    }
+                )
+            }
+            is AdbUpdateInstaller.GrantResult.NotAvailable -> {
+                isGrantingPermissions = false
+                adapter.refreshInfoPage()
+                showEnableWirelessDebuggingDialog()
+            }
+            is AdbUpdateInstaller.GrantResult.Error -> {
+                isGrantingPermissions = false
+                adapter.refreshInfoPage()
+                Toast.makeText(this, result.message, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     /** Reloads the slot list from storage and re-binds the slot-list page. */
     private fun refreshSlots() {
         adapter.submitSlots(TargetAppPrefs.getSlots(this))
+    }
+
+    /**
+     * "Умный дом Яндекса" tile on the Integrations page — first tap starts
+     * the Device Flow QR/code screen, every tap after a successful
+     * authorization goes straight to the hub (devices/groups/disconnect)
+     * instead. onResume() re-checks this every time the person comes back
+     * from either screen, so signing out or a token failure there is
+     * reflected here without any extra plumbing.
+     */
+    private fun openYandexSmartHome() {
+        val intent = if (SmartHomePrefs.isAuthorized(this)) {
+            SmartHomeHubActivity.intent(this)
+        } else {
+            SmartHomeAuthActivity.intent(this)
+        }
+        startActivity(intent)
     }
 
     /**
@@ -395,52 +491,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun hasOverlayPermission(): Boolean = Settings.canDrawOverlays(this)
 
-    private fun requestPermissionsIfNeeded() {
-        if (hasMicPermission()) {
-            requestSecondaryPermissionsIfNeeded()
-        } else {
-            requestMicPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    private fun requestSecondaryPermissionsIfNeeded() {
-        val missing = mutableListOf<String>()
-        if (!hasContactsPermission()) missing.add(Manifest.permission.READ_CONTACTS)
-        if (!hasPermission(Manifest.permission.CALL_PHONE)) missing.add(Manifest.permission.CALL_PHONE)
-        if (!hasPermission(Manifest.permission.READ_PHONE_STATE)) {
-            missing.add(Manifest.permission.READ_PHONE_STATE)
-        }
-        if (!hasPermission(Manifest.permission.ANSWER_PHONE_CALLS)) {
-            missing.add(Manifest.permission.ANSWER_PHONE_CALLS)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            !hasPermission(Manifest.permission.POST_NOTIFICATIONS)
-        ) {
-            missing.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        if (missing.isEmpty()) {
-            loadPickerDataAsync()
-            requestOverlayPermissionIfNeeded()
-        } else {
-            requestSecondaryPermissionsLauncher.launch(missing.toTypedArray())
-        }
-    }
-
-    private fun requestOverlayPermissionIfNeeded() {
-        if (hasOverlayPermission()) return
-        try {
-            startActivity(
-                Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-            )
-        } catch (e: Exception) {
-            // No overlay-permission settings screen on this ROM — the app still
-            // works, just falls back to the notification path.
-        }
-    }
+    private fun hasBatteryPermission(): Boolean =
+        getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) ?: false
 
     // ---- Accessibility service status ----
 
@@ -465,12 +517,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * One status pill per thing that can silently break the app. Accessibility
-     * can't be requested programmatically (see class doc), so it's checked
-     * separately from the four runtime permissions below, which
-     * requestPermissionsIfNeeded() does prompt for automatically.
+     * True only once every permission "Выдать разрешения" also covers is
+     * actually granted — recomputed fresh on every bind of the info page's
+     * single status pill (see SlotsAdapter.InfoViewHolder), so the two stay
+     * in sync automatically instead of by hand.
      */
-    private fun buildStatus(): ServiceStatus {
+    private fun buildStatus(): Boolean {
         val accessibilityOn = isAccessibilityServiceEnabled()
         val micOk = hasMicPermission()
         val contactsOk = hasContactsPermission()
@@ -479,35 +531,19 @@ class MainActivity : AppCompatActivity() {
         // listener force a mic restart the instant a call ends (see
         // registerCallStateListener) and detect an incoming ring in the
         // first place, and ANSWER_PHONE_CALLS is what lets "прими звонок"/
-        // "отклони звонок" actually do anything. A "Телефон" pill that only
-        // checked some of these would read green while one silently didn't
-        // work.
+        // "отклони звонок" actually do anything.
         val phoneOk = hasPermission(Manifest.permission.CALL_PHONE) &&
             hasPermission(Manifest.permission.READ_PHONE_STATE) &&
             hasPermission(Manifest.permission.ANSWER_PHONE_CALLS)
+        // Below API 33 this permission doesn't exist as a concept, and
+        // checkSelfPermission() documents itself as returning granted for a
+        // permission the running platform doesn't know about — so this
+        // reads true there on its own, no version check needed.
+        val notificationsOk = hasPermission(Manifest.permission.POST_NOTIFICATIONS)
         val overlayOk = hasOverlayPermission()
+        val batteryOk = hasBatteryPermission()
 
-        return ServiceStatus(
-            accessibility = StatusItem(
-                if (accessibilityOn) "Спец. возможности: включены" else "Спец. возможности: выключены",
-                accessibilityOn
-            ),
-            microphone = StatusItem(
-                if (micOk) "Микрофон: разрешён" else "Микрофон: нет разрешения",
-                micOk
-            ),
-            contacts = StatusItem(
-                if (contactsOk) "Контакты: разрешены" else "Контакты: нет разрешения",
-                contactsOk
-            ),
-            phone = StatusItem(
-                if (phoneOk) "Телефон: разрешён" else "Телефон: нет разрешения",
-                phoneOk
-            ),
-            overlay = StatusItem(
-                if (overlayOk) "Поверх других приложений: разрешено" else "Поверх других приложений: нет разрешения",
-                overlayOk
-            )
-        )
+        return accessibilityOn && micOk && contactsOk && phoneOk &&
+            notificationsOk && overlayOk && batteryOk
     }
 }

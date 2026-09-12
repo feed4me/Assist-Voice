@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none"
+    android:clipToPadding="false"
+    android:paddingLeft="@dimen/screen_padding_h"
+    android:paddingRight="@dimen/screen_padding_h"
+    android:paddingTop="@dimen/screen_padding_v"
+    android:paddingBottom="@dimen/screen_padding_v">
+
+    <!-- paddingTop here (stacking with the ScrollView's own
+         screen_padding_v above) is the same round-bezel clearance
+         scroll_bottom_extra gives disconnectButton below — a round screen
+         cuts corners at the top the same way it does at the bottom. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingTop="@dimen/scroll_bottom_extra">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.App.Label"
+            android:text="Умный дом Яндекса" />
+
+        <Button
+            android:id="@+id/devicesButton"
+            style="@style/Widget.App.Button.Primary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l"
+            android:text="Устройства" />
+
+        <Button
+            android:id="@+id/groupsButton"
+            style="@style/Widget.App.Button.Primary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_m"
+            android:text="Группы устройств" />
+
+        <!-- Inline, not a popup dialog — an AlertDialog with an EditText on
+             this round screen rendered as an oversized rectangular Material
+             dialog cut off by the bezel ("странный серый экран"). Same
+             tap-to-edit language as SmartHomeDeviceCommandsActivity's
+             command form, just always expanded since there's only one
+             field, no row to pick first. -->
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_m">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Стартовое слово" />
+
+            <EditText
+                android:id="@+id/startWordInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="12sp"
+                android:gravity="center"
+                android:inputType="text"
+                android:singleLine="true" />
+
+            <Button
+                android:id="@+id/startWordSaveButton"
+                style="@style/Widget.App.Button.Primary"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_s"
+                android:text="Сохранить" />
+
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/disconnectButton"
+            style="@style/Widget.App.Button.Danger"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xl"
+            android:layout_marginBottom="@dimen/scroll_bottom_extra"
+            android:text="Отключить интеграцию" />
+
+    </LinearLayout>
+</ScrollView>
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

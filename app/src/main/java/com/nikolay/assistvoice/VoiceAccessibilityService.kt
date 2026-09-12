@@ -13,6 +13,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.provider.Settings
 import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
@@ -21,7 +23,6 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import androidx.core.content.ContextCompat
-import org.json.JSONArray
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
@@ -47,20 +48,21 @@ import org.vosk.android.StorageService
  *
  * ## Recognition design
  *
- * Two mechanisms carry the load, and they attack different things:
+ * Recognition is full open-vocabulary (see ensureRecognizer()) — Vosk
+ * transcribes freely and handleHypothesis() matches the result text against
+ * the configured phrases itself. An earlier grammar-constrained version was
+ * replaced after testing showed it could cause its own false triggers:
+ * presented with audio that matched nothing configured, a closed grammar
+ * must still map it onto its nearest allowed entry, and no amount of decoy
+ * padding fully closed that gap. Two mechanisms carry the false-trigger/CPU
+ * load now instead:
  *
- * 1. **Two-word phrase grammar** (see VoicePhrases) fixes false triggers. A
- *    grammar recognizer must map any sound onto its nearest entry; requiring
- *    two specific words in sequence makes that a much harder accident.
+ * 1. **Two-word phrases** (see VoicePhrases) fix false triggers. Requiring
+ *    two specific words *in sequence* to match is a much harder accident for
+ *    unrelated speech or noise to produce than either word alone.
  * 2. **A near-field VAD gate** (see AudioCaptureLoop) fixes the CPU cost. The
  *    decoder is fed only during loud close-range speech, so it idles almost
  *    all the time instead of decoding continuously while the screen is on.
- *
- * A grammar carries no language model, so padding it with a large general
- * vocabulary instead of gating audio does not reduce CPU cost: it's a flat
- * word loop whose search beam stays wide however the vocabulary is sized,
- * while the acoustic forward pass costs the same either way. Vocabulary size
- * is not the lever; frames-fed-to-the-decoder is.
  *
  * ## The screen "flashlight"
  *
@@ -132,6 +134,19 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
 
         private const val WAKE_STARTUP_LOCK_MS = 3000L
 
+        // Safety backstop for a smart-home command's network round trip (see
+        // onSmartHomeCommand): getValidAccessToken() can itself make one
+        // refresh request before sendAction()'s own request, and each of
+        // those has a 10s connect + 10s read timeout in
+        // YandexOAuthDeviceFlow/YandexIotClient — 45s comfortably covers two
+        // such requests back to back before this gives up and reports "no
+        // response" on its own, releasing the screen-hold wake lock either way.
+        private const val SMART_HOME_TIMEOUT_MS = 45_000L
+
+        /** Confirmed on-device — see vibrateOnCommandMatch()'s doc: shorter
+         * than this was never actually felt on this watch's motor. */
+        private const val COMMAND_VIBRATE_MS = 200L
+
         /**
          * Keep the indicator overlay window alive while the screen is off,
          * instead of tearing it down and rebuilding it on each listen cycle.
@@ -150,10 +165,11 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         private const val KEEP_OVERLAY_WHILE_ASLEEP = true
 
         /**
-         * Packages that count as "the watch face is showing".
+         * Packages that count as "the watch face is showing", per device/ROM.
          *
-         * Read off this device from logcat — both the static and the animated
-         * capture show `HybridService: onStartedWakingUp frontComponentName:
+         * com.huawei.watch.home / com.huawei.watch.watchface — this device,
+         * read off logcat: both the static and the animated capture show
+         * `HybridService: onStartedWakingUp frontComponentName:
          * ComponentInfo{com.huawei.watch.home/...HomeMainActivity}` and
          * `ScenarioService: front pkg : com.huawei.watch.home launcher: true`.
          * The watch-face *renderer* is a separate package
@@ -161,8 +177,17 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
          * watch.home rather than owning the foreground window, so it is
          * watch.home that window-state events report.
          *
+         * com.samsung.android.wearable.sysui — read off a Galaxy Watch (stock
+         * Wear OS) via `adb shell dumpsys window | grep mCurrentFocus` while
+         * sitting on its watch face. On Huawei, watch.home is also what's in
+         * front for the notification shade, app list, and the screens either
+         * side of the watch face, not the watch face narrowly — going by
+         * this same device's own settled behaviour, WEAR_OS_SYSUI_CLASS_NAME
+         * below being just as broad on other Wear OS devices is expected,
+         * not a gap next to this set.
+         *
          * Every foreground package is logged at INFO, so if a ROM update
-         * changes this, the new name is one logcat line away.
+         * changes one of these, the new name is one logcat line away.
          */
         /**
          * Window-state events from these packages never change the foreground
@@ -176,8 +201,26 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
 
         private val WATCH_FACE_PACKAGES = setOf(
             "com.huawei.watch.home",
-            "com.huawei.watch.watchface"
+            "com.huawei.watch.watchface",
+            "com.samsung.android.wearable.sysui"
         )
+
+        /**
+         * Fallback "is this the watch face" signal for any Wear OS device not
+         * covered by WATCH_FACE_PACKAGES by package name: the AOSP class that
+         * renders the system UI shell (watch face included) on stock Wear OS.
+         * OEMs reskin the *package* that hosts it (Samsung's is already listed
+         * above, explicitly, since it's confirmed), but the class itself is
+         * Google's own and not something an OEM rewrites, so it should be a
+         * stable signal across manufacturers this app has never specifically
+         * seen. Checked against the foreground window's className, captured
+         * alongside foregroundPackage — see onAccessibilityEvent().
+         *
+         * Not applicable to this device: Huawei's watch build isn't Wear OS,
+         * so its windows never report this class, only its own package names.
+         */
+        private const val WEAR_OS_SYSUI_CLASS_NAME =
+            "com.google.android.clockwork.sysui.mainui.activity.SysUiActivity"
 
         /**
          * Sentinel foregroundPackage value set the instant a LAUNCH_APP/CALL
@@ -223,21 +266,16 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     private var model: Model? = null
 
     /**
-     * Kept alive across start/stop cycles and rebuilt only when the set of
-     * command phrases changes. Constructing a grammar-constrained Recognizer
-     * builds a decoding graph, so rebuilding it on every screen wake would be
-     * both slow and, if the old one isn't closed, a native memory leak.
+     * Kept alive across start/stop cycles — open-vocabulary recognition (see
+     * ensureRecognizer()) doesn't depend on the phrase set at all, so this
+     * only ever needs rebuilding when the Model itself changes. Constructing
+     * a Recognizer isn't free, so keeping one around avoids paying that cost
+     * on every screen wake.
      *
      * Only touched from the main thread, and only while the capture loop is
      * stopped — see releaseRecognizer's note.
      */
     private var recognizer: Recognizer? = null
-
-    /** Identifies the phrase set the current recognizer was built with. */
-    private var recognizerGrammarKey: String? = null
-
-    /** True when the grammar was rejected and we fell back to open recognition. */
-    private var recognizerIsFallback = false
 
     private var captureLoop: AudioCaptureLoop? = null
     private var isListening = false
@@ -248,10 +286,16 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     private var screenReceiver: BroadcastReceiver? = null
     private var prefsChangeListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private var vadPrefsChangeListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var smartHomePrefsChangeListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
     private val handler = Handler(Looper.getMainLooper())
     private var screenOn = false
     private var wakeStartupLock: PowerManager.WakeLock? = null
     private var screenHoldWakeLock: PowerManager.WakeLock? = null
+    /** Held from the moment a smart-home command is sent until its result
+     * arrives (or the safety timeout below fires) — see onSmartHomeCommand. */
+    private var smartHomeWakeLock: PowerManager.WakeLock? = null
+    /** Identifies the currently pending smart-home request — see finishSmartHomeCommand. */
+    private var smartHomeTimeoutRunnable: Runnable? = null
 
     private var telephonyManager: TelephonyManager? = null
     private var legacyPhoneStateListener: PhoneStateListener? = null
@@ -280,8 +324,6 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     @Volatile
     private var vadParams: VadSettings.Params = VadSettings.Params(
         thresholdRms = VadSettings.DEFAULT_THRESHOLD_RMS,
-        hangoverMs = VadSettings.DEFAULT_HANGOVER_MS,
-        prerollMs = VadSettings.DEFAULT_PREROLL_MS,
         screenHoldSeconds = VadSettings.DEFAULT_SCREEN_HOLD_SECONDS
     )
 
@@ -296,6 +338,22 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     /** Phrase per active slot, in the same order — built once per cache refresh. */
     @Volatile
     private var activePhrases: List<String> = emptyList()
+
+    // ---- Smart-home command cache ----
+    // Same shape as the slot cache above (cachedSlots/activeSlots/activePhrases):
+    // a dynamic, prefs-driven list rather than the fixed constants
+    // MUSIC_PHRASES/CALL_ACTION_PHRASES use, so it follows the slot pattern,
+    // not theirs — see refreshSmartHomeCache().
+
+    private var cachedSmartHomeCommands: List<SmartHomeCommand> = emptyList()
+
+    /** Written on the main thread, read on the decoder thread. */
+    @Volatile
+    private var activeSmartHomeCommands: List<SmartHomeCommand> = emptyList()
+
+    /** Full phrase ("алиса свет кухня") per active command, same order. */
+    @Volatile
+    private var activeSmartHomePhrases: List<String> = emptyList()
 
     // ---- Trigger state ----
 
@@ -316,6 +374,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
 
     private var micVerified = false
     private val indicatorOverlay by lazy { MicIndicatorOverlay(this) }
+    private val smartHomeResultOverlay by lazy { SmartHomeResultOverlay(this) }
     private var retryIndex = 0
 
     /**
@@ -347,6 +406,15 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     @Volatile
     private var foregroundPackage: String = WATCH_FACE_PACKAGES.first()
 
+    /** Class of the same front window as [foregroundPackage] — see
+     * WEAR_OS_SYSUI_CLASS_NAME's doc. Null whenever foregroundPackage was set
+     * from something other than a real window-state event (the initial seed
+     * above, or one of the sentinel resets on screen wake / call end /
+     * onCommandDetected()), so a stale class name from a previous real
+     * window can't wrongly satisfy isOnWatchFace() on its own. */
+    @Volatile
+    private var foregroundClassName: String? = null
+
     private val retryRunnable = Runnable {
         // Capped rather than incremented unconditionally: once retryIndex
         // reaches RETRY_DELAYS_MS.size, scheduleRetry() switches to the
@@ -375,6 +443,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         // duplicate handlers all racing to start the recognizer.
         if (initialized) {
             refreshSlotCache()
+            refreshSmartHomeCache()
             return
         }
         initialized = true
@@ -384,8 +453,10 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         vadParams = VadSettings.load(this)
         overlayParams = OverlaySettings.load(this)
         refreshSlotCache()
+        refreshSmartHomeCache()
         registerPrefsChangeListener()
         registerVadPrefsChangeListener()
+        registerSmartHomePrefsChangeListener()
         registerScreenReceiver()
         registerCallStateListener()
         screenOn = isScreenCurrentlyOn()
@@ -441,16 +512,30 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             return
         }
         foregroundPackage = pkg
+        foregroundClassName = event.className?.toString()
         // Logged unconditionally: this is how the watch-face package name gets
         // discovered if a ROM update ever changes it.
-        Log.i(TAG, "Foreground package: $pkg (watch face: ${isOnWatchFace()})")
+        Log.i(TAG, "Foreground package: $pkg / $foregroundClassName (watch face: ${isOnWatchFace()})")
         handler.post { onForegroundPackageChanged() }
     }
 
     private fun isInputMethodWindow(event: AccessibilityEvent): Boolean =
         event.className?.toString() == "android.inputmethodservice.SoftInputWindow"
 
-    private fun isOnWatchFace(): Boolean = foregroundPackage in WATCH_FACE_PACKAGES
+    /**
+     * The "Работает везде" checkbox on "Команды" (TargetAppPrefs
+     * .isListenEverywhereEnabled()) short-circuits this to always true —
+     * checked first since it's a cheap SharedPreferences read and every
+     * caller of this function treats "on the watch face" as the single
+     * gate for whether listening is allowed at all. Off by default: the
+     * watch-face package list below is Huawei-specific, plus a Samsung
+     * package and a generic Wear OS fallback (see WATCH_FACE_PACKAGES'
+     * and WEAR_OS_SYSUI_CLASS_NAME's own docs) — this is the escape hatch
+     * for whatever foreground package/class a given watch uses instead.
+     */
+    private fun isOnWatchFace(): Boolean =
+        TargetAppPrefs.isListenEverywhereEnabled(this) ||
+            foregroundPackage in WATCH_FACE_PACKAGES || foregroundClassName == WEAR_OS_SYSUI_CLASS_NAME
 
     /**
      * Listening is deliberately confined to the watch face — except while
@@ -482,9 +567,11 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         MicForegroundService.onForegroundReady = null
         releaseWakeStartupLock()
         releaseScreenHoldWakeLock()
+        releaseSmartHomeWakeLock()
 
         stopListening(updateStatus = false)
         hideOverlay()
+        smartHomeResultOverlay.hide()
         releaseRecognizer()
 
         // Strict ordering: the Recognizer holds a native pointer into the
@@ -504,6 +591,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
 
         unregisterPrefsChangeListener()
         unregisterVadPrefsChangeListener()
+        unregisterSmartHomePrefsChangeListener()
         unregisterCallStateListener()
         MicForegroundService.stop(this)
         VoiceNotifications.releaseOwnership(this)
@@ -515,26 +603,20 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     // Slot cache
     // ------------------------------------------------------------------
 
+    /**
+     * Recognition is full open-vocabulary (see ensureRecognizer()), so the
+     * Recognizer itself doesn't depend on the phrase set at all — only
+     * handleHypothesis()'s text matching does, and it reads activePhrases
+     * fresh on every call. So a slot change here never needs to touch the
+     * recognizer, only the caches and, if listening had stopped for some
+     * other reason, resuming it.
+     */
     private fun refreshSlotCache() {
         cachedSlots = TargetAppPrefs.getSlots(this)
-        val previousPhrases = activePhrases
-
         activeSlots = cachedSlots.filter { it.enabled && it.wakeWord.isNotBlank() }
         activePhrases = activeSlots.map { VoicePhrases.phraseFor(it) }
-        val phrasesChanged = activePhrases != previousPhrases
 
-        // The grammar is built from these phrases plus the fixed flashlight
-        // phrases (see ensureRecognizer), so a changed set means the decoding
-        // graph is stale, not just the status text. Listening is never gated
-        // on activeSlots being non-empty any more — "включи/выключи фонарик"
-        // must keep working even with zero configured slots.
-        if (phrasesChanged && isListening) {
-            stopListening(updateStatus = false)
-            releaseRecognizer()
-            if (screenOn) startListening()
-        } else if (isListening) {
-            postStatus(listeningStatusText())
-        } else if (screenOn && (isOnWatchFace() || callRinging)) {
+        if (!isListening && screenOn && (isOnWatchFace() || callRinging)) {
             startListening()
         }
     }
@@ -556,6 +638,38 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
                 .unregisterOnSharedPreferenceChangeListener(it)
         }
         prefsChangeListener = null
+    }
+
+    // ---- Smart-home command cache ----
+
+    /** Mirrors refreshSlotCache() above — same reasoning, separate cache. */
+    private fun refreshSmartHomeCache() {
+        cachedSmartHomeCommands = SmartHomePrefs.getCommands(this)
+        activeSmartHomeCommands = cachedSmartHomeCommands.filter { it.phrase.isNotBlank() }
+        activeSmartHomePhrases = activeSmartHomeCommands.map {
+            VoicePhrases.smartHomeYandexPhraseFor(this, it.value, it.phrase)
+        }
+
+        if (!isListening && screenOn && (isOnWatchFace() || callRinging)) {
+            startListening()
+        }
+    }
+
+    private fun registerSmartHomePrefsChangeListener() {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            handler.post { refreshSmartHomeCache() }
+        }
+        getSharedPreferences(SmartHomePrefs.PREFS_NAME, Context.MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(listener)
+        smartHomePrefsChangeListener = listener
+    }
+
+    private fun unregisterSmartHomePrefsChangeListener() {
+        smartHomePrefsChangeListener?.let {
+            getSharedPreferences(SmartHomePrefs.PREFS_NAME, Context.MODE_PRIVATE)
+                .unregisterOnSharedPreferenceChangeListener(it)
+        }
+        smartHomePrefsChangeListener = null
     }
 
     /**
@@ -681,6 +795,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
                         // within milliseconds regardless.
                         if (foregroundPackage == AWAY_FROM_WATCH_FACE_MARKER) {
                             foregroundPackage = WATCH_FACE_PACKAGES.first()
+                            foregroundClassName = null
                         }
                         acquireWakeStartupLock()
                         // Slots may have been edited while the screen was off.
@@ -942,6 +1057,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         // milliseconds by the next real TYPE_WINDOW_STATE_CHANGED.
         if (!isOnWatchFace()) {
             foregroundPackage = WATCH_FACE_PACKAGES.first()
+            foregroundClassName = null
         }
 
         startListening()
@@ -1106,125 +1222,37 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     }
 
     /**
-     * Builds the recognizer for the current command phrases.
+     * Builds (or returns the already-built) recognizer.
      *
-     * Three tiers, in order:
+     * Full open-vocabulary recognition — Vosk transcribes freely, and
+     * handleHypothesis() matches the result against activePhrases/
+     * activeSmartHomePhrases/the fixed reserved phrases itself. Testing
+     * found grammar-constrained decoding (an earlier version of this
+     * function) actively caused false triggers of its own: presented with
+     * audio that wasn't any configured phrase, a closed grammar must still
+     * map it onto its nearest entry, and padding the grammar with decoy
+     * words never fully closed that gap. Open recognition has nowhere to
+     * force a bad match onto — the two-word phrase requirement (see
+     * VoicePhrases' class doc) is what actually carries the false-trigger
+     * defence now.
      *
-     *  1. A grammar of the full two-word phrases plus `[unk]`. This is the
-     *     intended mode: the smallest possible decoding graph, and noise has to
-     *     land on two specific words in sequence to trigger anything.
-     *  2. If that constructor is rejected, a grammar of the individual words.
-     *     Weaker against false triggers but still cheap, and it isolates the
-     *     failure to phrase support rather than losing recognition entirely.
-     *  3. Fully open recognition. Correct but slow enough that other apps
-     *     stutter — the status line says so explicitly rather than leaving a
-     *     silently degraded build looking healthy.
-     *
-     * Tier 1 should not normally fail: every wake word is checked against the
-     * model's vocabulary at save time (WakeWordDictionary) and both prefixes
-     * are known-present words. The ladder exists so that a model swap or a
-     * hand-edited prefs file degrades visibly instead of silently.
+     * Doesn't depend on the phrase set at all, so a slot or smart-home
+     * command change never needs to rebuild it — only the Model changing
+     * would (there is currently nothing that ever does that at runtime).
      */
     private fun ensureRecognizer(): Recognizer? {
+        recognizer?.let { return it }
         val currentModel = model ?: return null
-        // The flashlight, music and call-action phrases are folded in
-        // unconditionally — they are reserved commands outside the slot
-        // mechanism entirely (see VoicePhrases), always active regardless
-        // of what slots exist.
-        val phrases = (
-            activePhrases.filter { it.isNotBlank() } +
-                VoicePhrases.FLASHLIGHT_PHRASES +
-                VoicePhrases.MUSIC_PHRASES +
-                VoicePhrases.CALL_ACTION_PHRASES
-            ).distinct()
-        val key = phrases.joinToString("|")
-
-        recognizer?.let { existing ->
-            if (recognizerGrammarKey == key) return existing
-        }
-        releaseRecognizer()
-
-        if (phrases.isNotEmpty()) {
-            // Tried first: the real phrases plus a handful of words
-            // phonetically close to each prefix (see VoicePhrases' doc),
-            // purely so ambiguous audio has somewhere else to land instead of
-            // snapping onto an actual command. If any decoy turns out to be
-            // outside the model's vocabulary, grammar construction is
-            // rejected as a whole and this falls through to the identical
-            // decoy-free attempt right below — never to the slow open-vocab
-            // tier over a guess that didn't pan out.
-            val decoys = VoicePhrases.DECOY_WORDS_LAUNCH_APP + VoicePhrases.DECOY_WORDS_CALL +
-                VoicePhrases.DECOY_WORDS_MUSIC + VoicePhrases.DECOY_WORDS_FLASHLIGHT +
-                VoicePhrases.DECOY_WORDS_CALL_ACTION
-            buildWithGrammar(currentModel, grammarJson(phrases + decoys))?.let { built ->
-                recognizer = built
-                recognizerGrammarKey = key
-                recognizerIsFallback = false
-                Log.i(TAG, "Recognizer built with phrase grammar + decoys: $phrases / $decoys")
-                return built
-            }
-            Log.e(TAG, "Phrase grammar + decoys rejected — retrying without decoys")
-
-            buildWithGrammar(currentModel, grammarJson(phrases))?.let { built ->
-                recognizer = built
-                recognizerGrammarKey = key
-                recognizerIsFallback = false
-                Log.i(TAG, "Recognizer built with phrase grammar: $phrases")
-                return built
-            }
-
-            val words = phrases.flatMap { it.split(" ") }.filter { it.isNotBlank() }.distinct()
-            buildWithGrammar(currentModel, grammarJson(words))?.let { built ->
-                recognizer = built
-                recognizerGrammarKey = key
-                recognizerIsFallback = false
-                Log.e(TAG, "Phrase grammar rejected — fell back to a word grammar: $words")
-                return built
-            }
-        }
-
         return try {
             val built = Recognizer(currentModel, SAMPLE_RATE)
             built.setWords(true)
             recognizer = built
-            recognizerGrammarKey = key
-            recognizerIsFallback = true
-            Log.e(TAG, "Grammar unavailable — running fully open (slow)")
             built
         } catch (e: Exception) {
             Log.e(TAG, "Recognizer creation failed", e)
             recognizer = null
-            recognizerGrammarKey = null
-            recognizerIsFallback = false
             null
         }
-    }
-
-    private fun buildWithGrammar(currentModel: Model, grammar: String): Recognizer? = try {
-        Recognizer(currentModel, SAMPLE_RATE, grammar).apply {
-            // Per-word confidence, available in final results only (Vosk never
-            // puts it in partials). Nothing gates on it yet — it's logged on
-            // every completed utterance so a threshold can be set from real
-            // numbers later if false triggers survive the phrase requirement.
-            setWords(true)
-        }
-    } catch (e: Exception) {
-        Log.e(TAG, "Grammar recognizer construction failed", e)
-        null
-    }
-
-    /**
-     * `[unk]` is what lets the decoder answer "none of these" instead of being
-     * forced to pick the nearest entry. Padding the grammar with a large
-     * vocabulary instead would cost as much CPU as fully open recognition
-     * (see class doc) without buying anything the phrase requirement doesn't
-     * already provide more cheaply.
-     */
-    private fun grammarJson(entries: List<String>): String {
-        val array = JSONArray()
-        for (entry in entries) array.put(entry)
-        array.put("[unk]")
-        return array.toString()
     }
 
     /**
@@ -1235,8 +1263,6 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     private fun releaseRecognizer() {
         val current = recognizer
         recognizer = null
-        recognizerGrammarKey = null
-        recognizerIsFallback = false
         if (current != null) {
             try {
                 current.close()
@@ -1246,8 +1272,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         }
     }
 
-    private fun listeningStatusText(): String =
-        if (recognizerIsFallback) "Слушает (резервный режим, медленно)" else "Слушает…"
+    private fun listeningStatusText(): String = "Слушает…"
 
     private fun scheduleRetry() {
         if (!screenOn) return
@@ -1337,6 +1362,8 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
 
         val phrases = activePhrases
         val slots = activeSlots
+        val smartHomePhrases = activeSmartHomePhrases
+        val smartHomeCommands = activeSmartHomeCommands
         // Read once: this flips on the main thread, and every branch below
         // must act on one consistent snapshot rather than possibly changing
         // mid-decision.
@@ -1363,6 +1390,14 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
                 if (!candidate) {
                     for (phrase in VoicePhrases.CALL_ACTION_PHRASES) {
                         if (hypothesisJson.contains(phrase)) {
+                            candidate = true
+                            break
+                        }
+                    }
+                }
+                if (!candidate) {
+                    for (phrase in smartHomePhrases) {
+                        if (phrase.isNotEmpty() && hypothesisJson.contains(phrase)) {
                             candidate = true
                             break
                         }
@@ -1396,7 +1431,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         if (containsWholePhrase(text, VoicePhrases.PHRASE_FLASHLIGHT_OFF)) {
             Log.i(TAG, "Match: heard «$text» → ${VoicePhrases.PHRASE_FLASHLIGHT_OFF} (final=$final)")
             if (final) logFinalForCalibration(hypothesisJson)
-            handler.post { onFlashlightOffCommand() }
+            handler.post { vibrateOnCommandMatch(); onFlashlightOffCommand() }
             return
         }
 
@@ -1410,7 +1445,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         if (containsWholePhrase(text, VoicePhrases.PHRASE_FLASHLIGHT_ON)) {
             Log.i(TAG, "Match: heard «$text» → ${VoicePhrases.PHRASE_FLASHLIGHT_ON} (final=$final)")
             if (final) logFinalForCalibration(hypothesisJson)
-            handler.post { onFlashlightOnCommand() }
+            handler.post { vibrateOnCommandMatch(); onFlashlightOnCommand() }
             return
         }
 
@@ -1418,7 +1453,7 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             if (containsWholePhrase(text, phrase)) {
                 Log.i(TAG, "Match: heard «$text» → $phrase (final=$final)")
                 if (final) logFinalForCalibration(hypothesisJson)
-                handler.post { onMusicCommand(phrase) }
+                handler.post { vibrateOnCommandMatch(); onMusicCommand(phrase) }
                 return
             }
         }
@@ -1427,7 +1462,29 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
             if (containsWholePhrase(text, phrase)) {
                 Log.i(TAG, "Match: heard «$text» → $phrase (final=$final)")
                 if (final) logFinalForCalibration(hypothesisJson)
-                handler.post { onCallActionCommand(phrase) }
+                handler.post { vibrateOnCommandMatch(); onCallActionCommand(phrase) }
+                return
+            }
+        }
+
+        val matchedSmartHomeIndex = smartHomePhrases.indexOfFirst {
+            it.isNotEmpty() && containsWholePhrase(text, it)
+        }
+        if (matchedSmartHomeIndex >= 0) {
+            val matchedCommand = smartHomeCommands.getOrNull(matchedSmartHomeIndex)
+            if (matchedCommand != null) {
+                // Smart-home commands act on the real world over the network,
+                // so — unlike slot/flashlight/music/call-action matching
+                // above — they only ever fire on Vosk's final result, never a
+                // still-settling partial one that can still change.
+                if (final) {
+                    Log.i(
+                        TAG,
+                        "Match: heard «$text» → smart-home command «${smartHomePhrases[matchedSmartHomeIndex]}» (final=$final)"
+                    )
+                    logFinalForCalibration(hypothesisJson)
+                    handler.post { vibrateOnCommandMatch(); onSmartHomeCommand(matchedCommand) }
+                }
                 return
             }
         }
@@ -1441,17 +1498,34 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         Log.i(TAG, "Match: heard «$text» → command «${phrases[matchedIndex]}» (final=$final)")
         if (final) logFinalForCalibration(hypothesisJson)
 
-        handler.post { onCommandDetected(matchedSlot) }
+        handler.post { vibrateOnCommandMatch(); onCommandDetected(matchedSlot) }
+    }
+
+    /**
+     * Short haptic tick the instant any command matches — the same one call
+     * site for every kind (slot, flashlight, music, call action, smart
+     * home), see each handler.post{} above. Toggled from the "Команды" page
+     * — see TargetAppPrefs.isVibrateOnCommandEnabled().
+     *
+     * Confirmed on-device via `cmd vibrator_manager synced oneshot <ms>`:
+     * a plain createOneShot() under ~100ms was never felt at all on this
+     * watch's motor, so COMMAND_VIBRATE_MS is 200. Do Not Disturb still
+     * suppresses it — that shell command's own `-f` override
+     * (VibrationAttributes.FLAG_BYPASS_INTERRUPTION_FILTER) turned out to
+     * be @SystemApi, unavailable to a regular app's public SDK; bypassing
+     * DND for vibration is a platform-privileged capability, not something
+     * this app can opt into.
+     */
+    private fun vibrateOnCommandMatch() {
+        if (!TargetAppPrefs.isVibrateOnCommandEnabled(this)) return
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+        vibrator.vibrate(VibrationEffect.createOneShot(COMMAND_VIBRATE_MS, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
     /**
      * Logs the recognized text of a completed utterance together with its
-     * per-word confidences.
-     *
-     * This is the calibration hook: if false triggers ever survive the phrase
-     * requirement and the VAD gate, these lines are what a confidence
-     * threshold would be chosen from. Nothing acts on the numbers today —
-     * a cutoff should come from real data, not a guess.
+     * per-word confidences — a diagnostic trail for any false trigger that
+     * survives the two-word phrase requirement.
      */
     private fun logFinalForCalibration(hypothesisJson: String) {
         try {
@@ -1636,6 +1710,106 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
     }
 
     // ------------------------------------------------------------------
+    // Smart-home command dispatch (main thread)
+    // ------------------------------------------------------------------
+
+    /**
+     * Same launchInFlight guard as onMusicCommand/onCallActionCommand, for
+     * the same partial+final double-match reason — this doesn't touch
+     * foregroundPackage or the LAUNCH_APP/CALL mic bookkeeping either, since
+     * sending an action to Yandex never brings anything to the foreground.
+     *
+     * Unlike those two, the result isn't known synchronously: it's a network
+     * round trip (token refresh, if needed, then the actual action). A
+     * screen-bright wake lock is held from here until either the result
+     * comes back or SMART_HOME_TIMEOUT_MS elapses, whichever is first — a
+     * result that shows up after the screen already went to sleep would be
+     * a status popup nobody sees. "No response in time" is itself reported
+     * to the person, not just logged, same as a real error.
+     */
+    private fun onSmartHomeCommand(command: SmartHomeCommand) {
+        if (launchInFlight) return
+        launchInFlight = true
+
+        acquireSmartHomeWakeLock()
+
+        // Identifies which dispatch a result belongs to: finishSmartHomeCommand
+        // only acts if this is still the pending request, so a result that
+        // arrives after this one already timed out (or a later command was
+        // already dispatched) is silently ignored instead of double-toasting.
+        val timeoutRunnable = Runnable {
+            Log.e(TAG, "Smart-home command timed out: «${command.phrase}»")
+            finishSmartHomeCommand(null, "«${command.deviceName}»: нет ответа")
+        }
+        smartHomeTimeoutRunnable = timeoutRunnable
+        handler.postDelayed(timeoutRunnable, SMART_HOME_TIMEOUT_MS)
+
+        YandexOAuthDeviceFlow.getValidAccessToken(this) { token ->
+            if (token == null) {
+                finishSmartHomeCommand(timeoutRunnable, "«${command.deviceName}»: не авторизовано")
+                return@getValidAccessToken
+            }
+            YandexIotClient.sendAction(token, command) { result ->
+                val message = when (result) {
+                    is SendActionResult.Success -> {
+                        SmartHomeCommandEvents.notifySucceeded(
+                            command.deviceId, command.targetType, command.value
+                        )
+                        "«${command.deviceName}»: выполнено"
+                    }
+                    is SendActionResult.Error -> "«${command.deviceName}»: ${result.message}"
+                }
+                finishSmartHomeCommand(timeoutRunnable, message)
+            }
+        }
+
+        handler.removeCallbacks(resumeAfterActionRunnable)
+        handler.postDelayed(resumeAfterActionRunnable, POST_MATCH_RESTART_DELAY_MS)
+    }
+
+    /**
+     * [expectedTimeoutRunnable] must be the same Runnable onSmartHomeCommand
+     * scheduled for this dispatch (or null, when called from that Runnable
+     * itself) — a mismatch means a later command already replaced it, so
+     * this stale result is dropped rather than shown or double-releasing the
+     * wake lock.
+     */
+    private fun finishSmartHomeCommand(expectedTimeoutRunnable: Runnable?, message: String) {
+        val pending = smartHomeTimeoutRunnable ?: return
+        if (expectedTimeoutRunnable != null && pending !== expectedTimeoutRunnable) return
+        smartHomeTimeoutRunnable = null
+        handler.removeCallbacks(pending)
+        smartHomeResultOverlay.show(message)
+        releaseSmartHomeWakeLock()
+    }
+
+    private fun acquireSmartHomeWakeLock() {
+        releaseSmartHomeWakeLock()
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+            @Suppress("DEPRECATION")
+            val lock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "$packageName:smart_home_command"
+            )
+            lock.setReferenceCounted(false)
+            lock.acquire(SMART_HOME_TIMEOUT_MS + 2_000L)
+            smartHomeWakeLock = lock
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to acquire smart-home wake lock", e)
+        }
+    }
+
+    private fun releaseSmartHomeWakeLock() {
+        val lock = smartHomeWakeLock ?: return
+        smartHomeWakeLock = null
+        try {
+            if (lock.isHeld) lock.release()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to release smart-home wake lock", e)
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Action dispatch (main thread)
     // ------------------------------------------------------------------
 
@@ -1657,8 +1831,12 @@ class VoiceAccessibilityService : AccessibilityService(), AudioCaptureLoop.Sink 
         // See AWAY_FROM_WATCH_FACE_MARKER's doc: we know for a fact we're
         // about to leave the watch face, so say so now rather than trusting a
         // window-state event that a heavy launch can delay past the restart
-        // timer below.
+        // timer below. foregroundClassName is cleared too — otherwise a
+        // stale WEAR_OS_SYSUI_CLASS_NAME left over from before this launch
+        // would keep isOnWatchFace() reading true through the package
+        // sentinel that's specifically here to force it false.
         foregroundPackage = AWAY_FROM_WATCH_FACE_MARKER
+        foregroundClassName = null
 
         performAction(slot)
         holdScreenAfterCommand()

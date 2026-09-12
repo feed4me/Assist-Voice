@@ -16,6 +16,9 @@ name: Publish release
 # the same keystore must be reused for every release, forever — a different
 # key on a later release means Android refuses to install it as an update
 # over whatever's already on the watch.
+#
+# Also uses (optional, but needed for "Умный дом Яндекса" to work in the
+# built APK — see SmartHomeConfig.kt): YANDEX_CLIENT_ID, YANDEX_CLIENT_SECRET.
 on:
   push:
     tags:
@@ -87,6 +90,8 @@ jobs:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          YANDEX_CLIENT_ID: ${{ secrets.YANDEX_CLIENT_ID }}
+          YANDEX_CLIENT_SECRET: ${{ secrets.YANDEX_CLIENT_SECRET }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Rename APK for the release asset

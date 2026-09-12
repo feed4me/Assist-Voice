@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared by SmartHomeDeviceListActivity and SmartHomeGroupListActivity.
+     itemsRecycler is the one full-screen scrolling view (match_parent x
+     match_parent, no sibling taking up part of the screen) — its own first
+     item is the title+status header (item_smart_home_list_header.xml),
+     same pattern as item_picker.xml/PickerRowAdapter. A separate fixed
+     header block above a smaller weighted RecyclerView was tried first and
+     broke both CurvedScrollIndicatorView's arc (sized off the wrong,
+     smaller bounds) and rotary scroll reliability — see PickerActivity's
+     class doc for the original reasoning this follows. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/itemsRecycler"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:paddingLeft="@dimen/screen_padding_h"
+        android:paddingRight="@dimen/screen_padding_h"
+        android:paddingTop="@dimen/screen_padding_v"
+        android:paddingBottom="@dimen/scroll_bottom_extra"
+        android:scrollbars="none" />
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

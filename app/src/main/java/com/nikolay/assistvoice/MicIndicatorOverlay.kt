@@ -1,9 +1,6 @@
 package com.nikolay.assistvoice
 
 import android.content.Context
-import android.graphics.PixelFormat
-import android.os.Build
-import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -40,15 +37,10 @@ class MicIndicatorOverlay(private val context: Context) {
      * Shows (or reconfigures) the overlay. Safe to call repeatedly — if the
      * settings changed since the window went up, it is rebuilt.
      *
-     * Returns false when the overlay could not be shown, which on this ROM
-     * means the SYSTEM_ALERT_WINDOW permission is missing.
+     * Returns false when the overlay could not be shown at all — see
+     * OverlayWindows.add().
      */
     fun show(params: OverlaySettings.Params, state: MicIndicatorView.State): Boolean {
-        if (!Settings.canDrawOverlays(context)) {
-            Log.e(TAG, "No overlay permission — cannot show the indicator")
-            return false
-        }
-
         // A size or position change can't be applied to an existing window
         // without new LayoutParams, and switching between icon and 1x1 modes
         // swaps the view itself, so rebuild when the geometry moved. Colour is
@@ -57,11 +49,6 @@ class MicIndicatorOverlay(private val context: Context) {
         if (view != null && shownParams?.sameGeometryAs(params) != true) hide()
 
         if (view == null) {
-            val wm = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-            if (wm == null) {
-                Log.e(TAG, "No WindowManager")
-                return false
-            }
             val newView: View
             val sidePx: Int
             if (params.enabled) {
@@ -77,33 +64,16 @@ class MicIndicatorOverlay(private val context: Context) {
                 sidePx = 1
             }
 
-            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
-            }
-            val layout = WindowManager.LayoutParams(
-                sidePx, sidePx, type,
-                // Never take focus or touches: the watch face underneath has to
-                // keep working exactly as before.
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                // Gravity.CENTER makes x/y offsets from the middle of the
-                // screen, which is exactly the coordinate system the settings
-                // page presents. y grows downward.
-                gravity = Gravity.CENTER
-                x = if (params.enabled) dpToPx(params.offsetXDp) else 0
+            // Gravity.CENTER makes x/y offsets from the middle of the
+            // screen, which is exactly the coordinate system the settings
+            // page presents. y grows downward.
+            val wm = OverlayWindows.add(
+                context, newView, sidePx, sidePx, Gravity.CENTER,
+                x = if (params.enabled) dpToPx(params.offsetXDp) else 0,
                 y = if (params.enabled) dpToPx(params.offsetYDp) else 0
-            }
-
-            try {
-                wm.addView(newView, layout)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to add overlay", e)
+            )
+            if (wm == null) {
+                Log.e(TAG, "Failed to add overlay")
                 indicator = null
                 return false
             }

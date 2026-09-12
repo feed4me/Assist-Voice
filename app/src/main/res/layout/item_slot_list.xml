@@ -19,12 +19,18 @@
     android:paddingBottom="@dimen/screen_padding_v">
 
     <!-- Padding lives on the ScrollView (above), not here — see item_info.xml
-         for why. -->
+         for why. paddingBottom here (stacking with the ScrollView's own
+         screen_padding_v) is round-bezel clearance on the content's own
+         wrapper rather than a specific last child, since slotRowsContainer
+         is populated dynamically and emptyHint only sometimes replaces it
+         as the last visible thing — same reasoning as
+         activity_smart_home_auth.xml. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:gravity="center_horizontal">
+        android:gravity="center_horizontal"
+        android:paddingBottom="@dimen/scroll_bottom_extra">
 
         <TextView
             android:layout_width="wrap_content"
@@ -51,6 +57,24 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_s"
             android:text="Синхронизировать приложения и контакты" />
+
+        <CheckBox
+            android:id="@+id/vibrateOnCommandCheckbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_m"
+            android:text="Вибрация при команде" />
+
+        <!-- Text is set at runtime from TargetAppPrefs.isListenEverywhereEnabled()
+             — see SlotsAdapter.SlotListViewHolder — since the label itself
+             names the current state ("Работает на домашнем экране" /
+             "Работает везде") rather than describing an action. -->
+        <CheckBox
+            android:id="@+id/listenEverywhereCheckbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_s"
+            android:text="Работает на домашнем экране" />
 
         <LinearLayout
             android:id="@+id/slotRowsContainer"

@@ -7,19 +7,20 @@ import android.content.Context
  * the settings page reads to let the person calibrate the threshold by
  * actually speaking into the watch instead of guessing.
  *
- * These deliberately live in their own SharedPreferences file, separate from
- * TargetAppPrefs. VoiceAccessibilityService watches the slot prefs to decide
- * whether the decode grammar is stale; VAD tuning must never trigger that, and
- * keeping the two files apart makes that structural rather than a matter of
- * remembering to check which key changed.
+ * Only the loudness threshold and the post-command screen hold are exposed —
+ * the gate's hangover/preroll timing is fixed internally (see
+ * AudioCaptureLoop's own constants) since testing found no perceptible
+ * benefit to making them user-adjustable.
+ *
+ * Lives in its own SharedPreferences file, separate from TargetAppPrefs, so
+ * VoiceAccessibilityService's listener here never fires on an ordinary slot
+ * edit and vice versa.
  */
 object VadSettings {
 
     const val PREFS_NAME = "vad_settings"
 
     private const val KEY_THRESHOLD = "threshold_rms"
-    private const val KEY_HANGOVER_MS = "hangover_ms"
-    private const val KEY_PREROLL_MS = "preroll_ms"
     private const val KEY_SCREEN_HOLD_SECONDS = "screen_hold_seconds"
 
     /**
@@ -42,25 +43,6 @@ object VadSettings {
     const val MAX_THRESHOLD_RMS = 8000
 
     /**
-     * How long the level may stay below the threshold before the gate closes
-     * and the utterance is treated as finished. Too short clips the tail of
-     * the second word; too long keeps the decoder fed with silence.
-     */
-    const val DEFAULT_HANGOVER_MS = 400
-    const val MIN_HANGOVER_MS = 100
-    const val MAX_HANGOVER_MS = 2000
-
-    /**
-     * How much audio from *before* the gate opened is replayed into the
-     * decoder. Without this the opening consonant of «открой» is already gone
-     * by the time the level crosses the threshold, and the phrase never
-     * matches.
-     */
-    const val DEFAULT_PREROLL_MS = 250
-    const val MIN_PREROLL_MS = 0
-    const val MAX_PREROLL_MS = 500
-
-    /**
      * How long to hold the screen on (bright, no dim/timeout) after a command
      * fires, so the target app has time to actually appear before the watch's
      * own screen timeout can kick back in mid-launch. 0 disables the hold
@@ -74,8 +56,6 @@ object VadSettings {
 
     data class Params(
         val thresholdRms: Int,
-        val hangoverMs: Int,
-        val prerollMs: Int,
         val screenHoldSeconds: Int
     )
 
@@ -84,10 +64,6 @@ object VadSettings {
         return Params(
             thresholdRms = prefs.getInt(KEY_THRESHOLD, DEFAULT_THRESHOLD_RMS)
                 .coerceIn(MIN_THRESHOLD_RMS, MAX_THRESHOLD_RMS),
-            hangoverMs = prefs.getInt(KEY_HANGOVER_MS, DEFAULT_HANGOVER_MS)
-                .coerceIn(MIN_HANGOVER_MS, MAX_HANGOVER_MS),
-            prerollMs = prefs.getInt(KEY_PREROLL_MS, DEFAULT_PREROLL_MS)
-                .coerceIn(MIN_PREROLL_MS, MAX_PREROLL_MS),
             screenHoldSeconds = prefs.getInt(KEY_SCREEN_HOLD_SECONDS, DEFAULT_SCREEN_HOLD_SECONDS)
                 .coerceIn(MIN_SCREEN_HOLD_SECONDS, MAX_SCREEN_HOLD_SECONDS)
         )
@@ -96,18 +72,6 @@ object VadSettings {
     fun saveThreshold(context: Context, value: Int) {
         prefs(context).edit()
             .putInt(KEY_THRESHOLD, value.coerceIn(MIN_THRESHOLD_RMS, MAX_THRESHOLD_RMS))
-            .apply()
-    }
-
-    fun saveHangover(context: Context, value: Int) {
-        prefs(context).edit()
-            .putInt(KEY_HANGOVER_MS, value.coerceIn(MIN_HANGOVER_MS, MAX_HANGOVER_MS))
-            .apply()
-    }
-
-    fun savePreroll(context: Context, value: Int) {
-        prefs(context).edit()
-            .putInt(KEY_PREROLL_MS, value.coerceIn(MIN_PREROLL_MS, MAX_PREROLL_MS))
             .apply()
     }
 

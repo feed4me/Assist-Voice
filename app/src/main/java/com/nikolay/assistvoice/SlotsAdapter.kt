@@ -23,29 +23,6 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
 /**
- * Text plus a simple ok/not-ok flag for one status pill on the info page —
- * `ok` drives that pill's colour (green vs warm/amber), `text` is its
- * exact copy, both assembled by MainActivity.buildStatus().
- */
-data class StatusItem(val text: String, val ok: Boolean)
-
-/**
- * All the info page's status pills. Accessibility gets checked separately
- * from the four permissions because it can't be requested programmatically
- * (see MainActivity's class doc) — the permissions are all a runtime prompt
- * away, accessibility is a manual trip to system Settings, so calling that
- * one out distinctly is worth the extra field even though every pill renders
- * identically.
- */
-data class ServiceStatus(
-    val accessibility: StatusItem,
-    val microphone: StatusItem,
-    val contacts: StatusItem,
-    val phone: StatusItem,
-    val overlay: StatusItem
-)
-
-/**
  * Backs the ViewPager2 on MainActivity: a fixed sequence of 5 pages — info,
  * the slot list, microphone-gate (VAD) tuning, mic-icon appearance, and a
  * closing support/social page.
@@ -55,7 +32,10 @@ data class ServiceStatus(
  * a separate full-screen editor, outside the pager entirely.
  */
 class SlotsAdapter(
-    private val getStatusText: () -> ServiceStatus,
+    /** True once every permission this app uses is granted — owned by
+     * MainActivity (buildStatus()), read fresh on every bind. Drives the
+     * info page's single status pill. */
+    private val getStatusText: () -> Boolean,
     private val getInstalledApps: () -> List<InstalledApp>,
     private val getContacts: () -> List<Contact>,
     /** Called after a mutation made directly from the list (currently just
@@ -71,17 +51,27 @@ class SlotsAdapter(
     /** Called by the info page's single update button. MainActivity decides
      * what that tap means from the current UpdateStatus — check, download,
      * or re-prompt install — since it's the one holding that state. */
-    private val onUpdateButtonClicked: () -> Unit
+    private val onUpdateButtonClicked: () -> Unit,
+    /** True while the "Выдать разрешения" ADB button's attempt is in
+     * flight — owned by MainActivity, read fresh on every bind. */
+    private val isGrantingPermissions: () -> Boolean,
+    private val onGrantPermissionsButtonClicked: () -> Unit,
+    /** Called by the "Умный дом Яндекса" tile on the Integrations page.
+     * MainActivity decides whether that means launching the Device Flow
+     * auth screen or the device list, since that depends on
+     * SmartHomePrefs.isAuthorized() — not this adapter's concern. */
+    private val onOpenYandexSmartHome: () -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
         private const val TYPE_INFO = 0
         private const val TYPE_SLOT_LIST = 1
-        private const val TYPE_VAD = 2
-        private const val TYPE_ICON = 3
-        private const val TYPE_SUPPORT = 4
+        private const val TYPE_INTEGRATIONS = 2
+        private const val TYPE_VAD = 3
+        private const val TYPE_ICON = 4
+        private const val TYPE_SUPPORT = 5
 
-        private const val PAGE_COUNT = 5
+        private const val PAGE_COUNT = 6
 
         /** How often the VAD page re-reads the live level. */
         private const val VAD_TICK_MS = 150L
@@ -118,6 +108,13 @@ class SlotsAdapter(
         notifyItemChanged(TYPE_INFO)
     }
 
+    /** Call after returning from the Yandex Smart Home auth/device screens —
+     * anything that might have changed the tile's "Подключено"/"Не
+     * подключено" status text. */
+    fun refreshIntegrationsPage() {
+        notifyItemChanged(TYPE_INTEGRATIONS)
+    }
+
     override fun getItemCount(): Int = PAGE_COUNT
 
     override fun getItemViewType(position: Int): Int = position
@@ -127,6 +124,8 @@ class SlotsAdapter(
         return when (viewType) {
             TYPE_INFO -> InfoViewHolder(inflater.inflate(R.layout.item_info, parent, false))
             TYPE_SLOT_LIST -> SlotListViewHolder(inflater.inflate(R.layout.item_slot_list, parent, false))
+            TYPE_INTEGRATIONS ->
+                IntegrationsViewHolder(inflater.inflate(R.layout.item_integrations, parent, false))
             TYPE_VAD -> VadViewHolder(inflater.inflate(R.layout.item_vad, parent, false))
             TYPE_ICON -> IconViewHolder(inflater.inflate(R.layout.item_icon, parent, false))
             else -> SupportViewHolder(inflater.inflate(R.layout.item_support, parent, false))
@@ -135,8 +134,9 @@ class SlotsAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (holder) {
-            is InfoViewHolder -> holder.bind(getStatusText(), getUpdateStatus())
+            is InfoViewHolder -> holder.bind(getStatusText(), getUpdateStatus(), isGrantingPermissions())
             is SlotListViewHolder -> holder.bind(slots)
+            is IntegrationsViewHolder -> holder.bind()
             is VadViewHolder -> holder.bind()
             is IconViewHolder -> holder.bind()
             is SupportViewHolder -> Unit // Static content, nothing to bind.
@@ -164,12 +164,8 @@ class SlotsAdapter(
         // itemView is the FrameLayout wrapper (see item_info.xml) —
         // scrollRoot is the actual ScrollView, a child of it.
         private val scrollRoot: ScrollView = itemView.findViewById(R.id.scrollRoot)
-        private val statusText: TextView = itemView.findViewById(R.id.statusText)
-        private val micStatusText: TextView = itemView.findViewById(R.id.micStatusText)
-        private val contactsStatusText: TextView = itemView.findViewById(R.id.contactsStatusText)
-        private val phoneStatusText: TextView = itemView.findViewById(R.id.phoneStatusText)
-        private val overlayStatusText: TextView = itemView.findViewById(R.id.overlayStatusText)
-        private val allGrantedText: TextView = itemView.findViewById(R.id.allGrantedText)
+        private val permissionsStatusText: TextView = itemView.findViewById(R.id.permissionsStatusText)
+        private val grantPermissionsButton: Button = itemView.findViewById(R.id.grantPermissionsButton)
         private val repoQrImage: ImageView = itemView.findViewById(R.id.repoQrImage)
         private val appVersionText: TextView = itemView.findViewById(R.id.appVersionText)
         private val checkUpdatesButton: Button = itemView.findViewById(R.id.checkUpdatesButton)
@@ -180,50 +176,34 @@ class SlotsAdapter(
             itemView.findViewById<CurvedScrollIndicatorView>(R.id.scrollIndicator).attachTo(scrollRoot)
             appVersionText.text = "Версия ${BuildConfig.VERSION_NAME}"
             checkUpdatesButton.setOnClickListener { onUpdateButtonClicked() }
+            grantPermissionsButton.setOnClickListener { onGrantPermissionsButtonClicked() }
 
             val sizePx = (120 * itemView.resources.displayMetrics.density).toInt()
             repoQrImage.setImageBitmap(QrCode.render(REPO_URL, sizePx))
         }
 
         /**
-         * Each pill is only shown when its own check is actually failing —
-         * a pill for something already fine was just reassuring clutter on
-         * a screen this small. Once nothing is missing, all of them are
-         * hidden and allGrantedText takes their place instead of the page
-         * going empty.
+         * One non-interactive pill instead of one per permission — "Выдать
+         * разрешения" below is the only way to act on it, so there's
+         * nothing a tap on the pill itself would do.
          */
-        fun bind(status: ServiceStatus, updateStatus: UpdateStatus) {
-            val items = listOf(
-                statusText to status.accessibility,
-                micStatusText to status.microphone,
-                contactsStatusText to status.contacts,
-                phoneStatusText to status.phone,
-                overlayStatusText to status.overlay
-            )
-            val allOk = items.all { it.second.ok }
-
-            for ((view, item) in items) {
-                if (allOk || item.ok) {
-                    view.visibility = View.GONE
-                } else {
-                    paint(view, item)
-                    view.visibility = View.VISIBLE
-                }
-            }
-            allGrantedText.visibility = if (allOk) View.VISIBLE else View.GONE
-            bindUpdateSection(updateStatus)
-        }
-
-        private fun paint(view: TextView, item: StatusItem) {
-            view.text = item.text
+        fun bind(
+            allPermissionsGranted: Boolean,
+            updateStatus: UpdateStatus,
+            isGrantingPermissions: Boolean
+        ) {
             val context = itemView.context
-            if (item.ok) {
-                view.setBackgroundResource(R.drawable.bg_status_ok)
-                view.setTextColor(context.getColor(R.color.status_ok_text))
+            if (allPermissionsGranted) {
+                permissionsStatusText.text = "Все разрешения предоставлены"
+                permissionsStatusText.setBackgroundResource(R.drawable.bg_status_ok)
+                permissionsStatusText.setTextColor(context.getColor(R.color.status_ok_text))
             } else {
-                view.setBackgroundResource(R.drawable.bg_status_warn)
-                view.setTextColor(context.getColor(R.color.status_warn_text))
+                permissionsStatusText.text = "Не все разрешения предоставлены"
+                permissionsStatusText.setBackgroundResource(R.drawable.bg_status_warn)
+                permissionsStatusText.setTextColor(context.getColor(R.color.status_warn_text))
             }
+            bindUpdateSection(updateStatus)
+            bindGrantPermissionsSection(isGrantingPermissions)
         }
 
         private fun bindUpdateSection(status: UpdateStatus) {
@@ -280,6 +260,17 @@ class SlotsAdapter(
                 }
             }
         }
+
+        /**
+         * No separate success/failure readout of its own — a finished attempt
+         * just re-enables the button, and whatever it actually fixed shows up
+         * as the pills above refreshing on their own (see bind()).
+         */
+        private fun bindGrantPermissionsSection(isGrantingPermissions: Boolean) {
+            grantPermissionsButton.isEnabled = !isGrantingPermissions
+            grantPermissionsButton.text =
+                if (isGrantingPermissions) "Подключаюсь по ADB…" else "Выдать разрешения"
+        }
     }
 
     /**
@@ -296,6 +287,8 @@ class SlotsAdapter(
         private val scrollRoot: ScrollView = itemView.findViewById(R.id.scrollRoot)
         private val addButton: Button = itemView.findViewById(R.id.addSlotButton)
         private val syncButton: Button = itemView.findViewById(R.id.syncPickerDataButton)
+        private val vibrateCheckbox: CheckBox = itemView.findViewById(R.id.vibrateOnCommandCheckbox)
+        private val listenEverywhereCheckbox: CheckBox = itemView.findViewById(R.id.listenEverywhereCheckbox)
         private val rowsContainer: LinearLayout = itemView.findViewById(R.id.slotRowsContainer)
         private val emptyHint: View = itemView.findViewById(R.id.emptyHint)
 
@@ -314,6 +307,26 @@ class SlotsAdapter(
             }
 
             syncButton.setOnClickListener { onSyncPickerData() }
+
+            vibrateCheckbox.isChecked = TargetAppPrefs.isVibrateOnCommandEnabled(itemView.context)
+            vibrateCheckbox.setOnCheckedChangeListener { _, checked ->
+                TargetAppPrefs.saveVibrateOnCommand(itemView.context, checked)
+            }
+
+            listenEverywhereCheckbox.isChecked =
+                TargetAppPrefs.isListenEverywhereEnabled(itemView.context)
+            applyListenEverywhereLabel(listenEverywhereCheckbox.isChecked)
+            listenEverywhereCheckbox.setOnCheckedChangeListener { _, checked ->
+                TargetAppPrefs.saveListenEverywhere(itemView.context, checked)
+                applyListenEverywhereLabel(checked)
+            }
+        }
+
+        /** The checkbox's own label names the current state rather than an
+         * action, so it has to be set here instead of once in XML. */
+        private fun applyListenEverywhereLabel(everywhere: Boolean) {
+            listenEverywhereCheckbox.text =
+                if (everywhere) "Работает везде" else "Работает на домашнем экране"
         }
 
         fun bind(slots: List<VoiceSlot>) {
@@ -368,6 +381,42 @@ class SlotsAdapter(
     }
 
     /**
+     * Third-party service integrations — one tile per service. Only "Умный
+     * дом Яндекса" exists today; a second integration (different service,
+     * likely a completely different auth flow — local network credentials
+     * rather than OAuth, say) just means another tile added here, not a
+     * generic provider abstraction built ahead of having a second real
+     * implementation to generalize from.
+     *
+     * Tapping the tile always calls the same onOpenYandexSmartHome() —
+     * MainActivity decides whether that means the Device Flow auth screen or
+     * the device list, since only it knows SmartHomePrefs.isAuthorized().
+     */
+    inner class IntegrationsViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        // itemView is the FrameLayout wrapper (see item_integrations.xml) —
+        // scrollRoot is the actual ScrollView, a child of it.
+        private val scrollRoot: ScrollView = itemView.findViewById(R.id.scrollRoot)
+        private val yandexTile: View = itemView.findViewById(R.id.yandexSmartHomeTile)
+        private val yandexSubtitle: TextView = itemView.findViewById(R.id.yandexSmartHomeSubtitle)
+
+        init {
+            scrollRoot.enableRotaryScroll()
+            itemView.findViewById<CurvedScrollIndicatorView>(R.id.scrollIndicator).attachTo(scrollRoot)
+            yandexTile.setOnClickListener { onOpenYandexSmartHome() }
+        }
+
+        fun bind() {
+            val context = itemView.context
+            yandexSubtitle.text = if (SmartHomePrefs.isAuthorized(context)) {
+                val targetCount = SmartHomePrefs.getCommands(context).map { it.deviceId }.distinct().size
+                if (targetCount > 0) "Подключено · целей с командами: $targetCount" else "Подключено"
+            } else {
+                "Не подключено — нажми, чтобы авторизоваться"
+            }
+        }
+    }
+
+    /**
      * Microphone gate tuning.
      *
      * The live level readout is the point of this page. The gate uses an
@@ -389,12 +438,7 @@ class SlotsAdapter(
         private val resetPeakButton: Button = itemView.findViewById(R.id.vadResetPeakButton)
 
         private val thresholdSeek: SeekBar = itemView.findViewById(R.id.vadThresholdSeek)
-        private val hangoverSeek: SeekBar = itemView.findViewById(R.id.vadHangoverSeek)
-        private val prerollSeek: SeekBar = itemView.findViewById(R.id.vadPrerollSeek)
-
         private val thresholdLabel: TextView = itemView.findViewById(R.id.vadThresholdLabel)
-        private val hangoverLabel: TextView = itemView.findViewById(R.id.vadHangoverLabel)
-        private val prerollLabel: TextView = itemView.findViewById(R.id.vadPrerollLabel)
 
         private val screenHoldInput: EditText = itemView.findViewById(R.id.screenHoldInput)
 
@@ -402,11 +446,9 @@ class SlotsAdapter(
         private var suppressScreenHoldCallback = false
 
         // SeekBar.min is API 26+ and this app's minSdk allows it, but the
-        // ranges here don't start at zero anyway, so progress is kept as a
+        // range here doesn't start at zero anyway, so progress is kept as a
         // plain step count and converted in one place instead.
         private val thresholdStep = 100
-        private val hangoverStep = 100
-        private val prerollStep = 50
 
         private var ticking = false
 
@@ -424,10 +466,6 @@ class SlotsAdapter(
 
             thresholdSeek.max =
                 (VadSettings.MAX_THRESHOLD_RMS - VadSettings.MIN_THRESHOLD_RMS) / thresholdStep
-            hangoverSeek.max =
-                (VadSettings.MAX_HANGOVER_MS - VadSettings.MIN_HANGOVER_MS) / hangoverStep
-            prerollSeek.max =
-                (VadSettings.MAX_PREROLL_MS - VadSettings.MIN_PREROLL_MS) / prerollStep
 
             resetPeakButton.setOnClickListener { VadMonitor.resetPeak() }
 
@@ -439,20 +477,6 @@ class SlotsAdapter(
                     // setProgress in bind() would fire the service's prefs
                     // listener on every page bind for no reason.
                     if (fromUser) VadSettings.saveThreshold(itemView.context, value)
-                }
-            )
-            hangoverSeek.setOnSeekBarChangeListener(
-                onProgress { progress, fromUser ->
-                    val value = VadSettings.MIN_HANGOVER_MS + progress * hangoverStep
-                    hangoverLabel.text = "Хвост: $value мс"
-                    if (fromUser) VadSettings.saveHangover(itemView.context, value)
-                }
-            )
-            prerollSeek.setOnSeekBarChangeListener(
-                onProgress { progress, fromUser ->
-                    val value = VadSettings.MIN_PREROLL_MS + progress * prerollStep
-                    prerollLabel.text = "Преролл: $value мс"
-                    if (fromUser) VadSettings.savePreroll(itemView.context, value)
                 }
             )
 
@@ -483,17 +507,11 @@ class SlotsAdapter(
             val params = VadSettings.load(itemView.context)
             thresholdSeek.progress =
                 (params.thresholdRms - VadSettings.MIN_THRESHOLD_RMS) / thresholdStep
-            hangoverSeek.progress =
-                (params.hangoverMs - VadSettings.MIN_HANGOVER_MS) / hangoverStep
-            prerollSeek.progress =
-                (params.prerollMs - VadSettings.MIN_PREROLL_MS) / prerollStep
 
             // setProgress doesn't fire the listener when the value is unchanged
-            // (0 on a fresh holder is a common case), so the labels are set
+            // (0 on a fresh holder is a common case), so the label is set
             // explicitly rather than relying on the callback.
             thresholdLabel.text = "Порог: ${params.thresholdRms}"
-            hangoverLabel.text = "Хвост: ${params.hangoverMs} мс"
-            prerollLabel.text = "Преролл: ${params.prerollMs} мс"
 
             suppressScreenHoldCallback = true
             screenHoldInput.setText(params.screenHoldSeconds.toString())

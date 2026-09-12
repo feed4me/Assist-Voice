@@ -20,7 +20,7 @@
         android:paddingLeft="@dimen/screen_padding_h"
         android:paddingRight="@dimen/screen_padding_h"
         android:paddingTop="@dimen/screen_padding_v"
-        android:paddingBottom="@dimen/screen_padding_v"
+        android:paddingBottom="@dimen/scroll_bottom_extra"
         android:scrollbars="none" />
 
     <!-- See CurvedScrollIndicatorView's doc comment — replaces

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none"
+    android:clipToPadding="false"
+    android:paddingLeft="@dimen/screen_padding_h"
+    android:paddingRight="@dimen/screen_padding_h"
+    android:paddingTop="@dimen/screen_padding_v"
+    android:paddingBottom="@dimen/screen_padding_v">
+
+    <!-- paddingTop/paddingBottom here (stacking with the ScrollView's own
+         screen_padding_v) give round-bezel clearance on the content's own
+         wrapper. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingTop="@dimen/scroll_bottom_extra"
+        android:paddingBottom="@dimen/scroll_bottom_extra">
+
+        <TextView
+            android:id="@+id/deviceNameText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.App.Label"
+            android:text="" />
+
+        <!-- Always exactly two read-only preview rows (on/off) — never
+             added or removed, changed only as a pair via the text field
+             below (see SmartHomeDeviceCommandsActivity's class doc). -->
+        <LinearLayout
+            android:id="@+id/commandRowsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="@dimen/space_m" />
+
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Текст команды" />
+
+            <EditText
+                android:id="@+id/phraseInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:inputType="text"
+                android:singleLine="true"
+                android:hint="например: свет на кухне" />
+
+            <!-- One button, not two — one shared text saves both the on and
+                 off command at once (see SmartHomeDeviceCommandsActivity's
+                 class doc), always enabled and always this same colour. -->
+            <Button
+                android:id="@+id/saveButton"
+                style="@style/Widget.App.Button.Success"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_m"
+                android:text="Сохранить" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

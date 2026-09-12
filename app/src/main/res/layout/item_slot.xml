@@ -19,12 +19,16 @@
     android:paddingBottom="@dimen/screen_padding_v">
 
     <!-- Padding lives on the ScrollView (above), not here — see item_info.xml
-         for why. -->
+         for why. paddingTop here (stacking with the ScrollView's own
+         screen_padding_v) is round-bezel clearance for the Card that's the
+         first thing on this page — same reasoning as
+         activity_smart_home_hub.xml. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:gravity="center">
+        android:gravity="center"
+        android:paddingTop="@dimen/scroll_bottom_extra">
 
         <!-- On/off + action type -->
         <LinearLayout
@@ -244,6 +248,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_s"
+            android:layout_marginBottom="@dimen/scroll_bottom_extra"
             android:text="Удалить слот" />
 
     </LinearLayout>

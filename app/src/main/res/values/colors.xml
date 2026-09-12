@@ -37,6 +37,14 @@
     <color name="danger">#FF6B6B</color>
     <color name="danger_soft">#2A1620</color>
 
+    <!-- "On"/positive actions (smart-home save-on button, on/off badges) —
+         same soft-filled treatment and the same green as status_ok_*, kept
+         as its own named pair so Widget.App.Button.Success reads the same
+         way Widget.App.Button.Danger does, rather than borrowing a
+         status-pill-named token by accident. -->
+    <color name="success">#6FE2A0</color>
+    <color name="success_soft">#1B2E22</color>
+
     <!-- Two-state status pill on the info page (Accessibility service on/off). -->
     <color name="status_ok_bg">#1B2E22</color>
     <color name="status_ok_text">#6FE2A0</color>
@@ -45,5 +53,6 @@
 
     <color name="ripple_light">#33FFFFFF</color>
     <color name="ripple_danger">#40FF6B6B</color>
+    <color name="ripple_success">#406FE2A0</color>
 
 </resources>

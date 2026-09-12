@@ -42,6 +42,10 @@ object VoiceNotifications {
     const val STATUS_NOTIFICATION_ID = 1
     const val LAUNCH_NOTIFICATION_ID = 2
 
+    /** Arbitrary, fixed request code for the status notification's content
+     * intent — distinct from postLaunchFallback()'s per-slot ones. */
+    private const val STATUS_CONTENT_REQUEST_CODE = -2001
+
     private var channelsCreated = false
     private var lastStatusText: String? = null
 
@@ -77,6 +81,12 @@ object VoiceNotifications {
      */
     fun buildStatus(context: Context, statusText: String): Notification {
         ensureChannels(context)
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            STATUS_CONTENT_REQUEST_CODE,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
             // No setContentTitle(): System UI already labels the notification
             // with the app's own name and icon next to this text, so a title
@@ -88,6 +98,7 @@ object VoiceNotifications {
             .setShowWhen(true)
             .setWhen(System.currentTimeMillis())
             .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setContentIntent(contentIntent)
             .build()
     }
 

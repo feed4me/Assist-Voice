@@ -15,6 +15,10 @@
          and endCall() (see VoiceAccessibilityService's call handling section). -->
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
+    <!-- "Батарея" status pill on the info page — lets the app both read and
+         request exemption from Doze/App Standby battery optimization. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- In-app update check/download (UpdateChecker, UpdateInstaller) and
          handing the downloaded APK to the system installer. -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -35,6 +39,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- AdbInstallForegroundService: keeps this process alive for the
          duration of an in-progress ADB update install, so the firmware's
@@ -99,15 +104,48 @@
             android:name=".PickerActivity"
             android:exported="false" />
 
+        <!-- Умный дом Яндекса — Device Flow auth, hub menu, device/group
+             lists, per-target commands (see SmartHomeAuthActivity/
+             SmartHomeHubActivity/SmartHomeDeviceListActivity/
+             SmartHomeGroupListActivity/SmartHomeDeviceCommandsActivity).
+             Only the last one has an EditText, so only it needs adjustPan
+             (same reasoning as SlotEditActivity above). -->
+        <activity
+            android:name=".SmartHomeAuthActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SmartHomeHubActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SmartHomeDeviceListActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SmartHomeGroupListActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SmartHomeDeviceCommandsActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustPan" />
+
         <!-- Screen "flashlight" — see FlashlightActivity/VoicePhrases. Not
              reachable from any launcher/menu: only VoiceAccessibilityService
              starts it, on the hard-coded "включи фонарик" command.
              singleTask + noHistory keep a repeated command from stacking
-             duplicate windows and keep it out of the recents/back stack. -->
+             duplicate windows and keep it out of the recents/back stack.
+             taskAffinity="" gives it its own isolated task instead of
+             sharing this app's default one — without it, finish() (tap or
+             "выключи фонарик") could reveal whatever one of this app's own
+             screens was left open in the background instead of returning
+             to whatever was actually on screen before the flashlight. -->
         <activity
             android:name=".FlashlightActivity"
             android:exported="false"
             android:launchMode="singleTask"
+            android:taskAffinity=""
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:theme="@style/Theme.Flashlight" />

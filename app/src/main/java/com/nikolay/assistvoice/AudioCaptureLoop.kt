@@ -20,14 +20,13 @@ import java.util.concurrent.TimeUnit
  *
  * ## Why gating is the main performance lever
  *
- * Decoder cost is (cost per frame) x (number of frames). Shrinking the
- * grammar's vocabulary only ever attacks the first factor, and barely: a
- * grammar with no language model behind it is a flat word loop whose beam
- * stays wide no matter how the vocabulary is sized, while the acoustic
- * network's forward pass costs the same regardless. Gating attacks the second
- * factor instead, and it is the far larger one: the decoder is fed only while
- * a loud, close-range voice is present, so it sits idle essentially all the
- * time the watch is simply awake. That is what stops other apps stuttering.
+ * Decoder cost is (cost per frame) x (number of frames). Recognition is full
+ * open-vocabulary (see VoiceAccessibilityService.ensureRecognizer()), so
+ * there's no smaller vocabulary to fall back on to cut the first factor.
+ * Gating attacks the second factor instead, and it's the only lever this app
+ * has: the decoder is fed only while a loud, close-range voice is present, so
+ * it sits idle essentially all the time the watch is simply awake. That is
+ * what stops other apps stuttering.
  *
  * ## Threads
  *
@@ -82,6 +81,23 @@ class AudioCaptureLoop(
 
         /** ~3 s of gated audio in flight before we start dropping frames. */
         private const val QUEUE_CAPACITY = 150
+
+        /**
+         * How long the level may stay below the threshold before the gate
+         * closes and the utterance is treated as finished. Too short clips
+         * the tail of the second word; too long keeps the decoder fed with
+         * silence. Fixed rather than user-tunable — testing found no
+         * perceptible difference across the whole adjustable range.
+         */
+        private const val HANGOVER_MS = 400
+
+        /**
+         * How much audio from *before* the gate opened is replayed into the
+         * decoder, so the opening consonant of a command isn't already gone
+         * by the time the level crosses the threshold. Fixed rather than
+         * user-tunable, same reasoning as HANGOVER_MS.
+         */
+        private const val PREROLL_MS = 250
 
         private val END_OF_SEGMENT = Any()
     }
@@ -247,8 +263,10 @@ class AudioCaptureLoop(
 
         // Pre-roll ring: whole frames, written in place, so nothing is
         // allocated while the gate is closed (which is nearly always).
-        var prerollFrames = prerollFrameCount(params().prerollMs)
-        var ring = Array(maxOf(prerollFrames, 1)) { ShortArray(frameSamples) }
+        // Fixed size — PREROLL_MS is a constant, not user-tunable — so the
+        // ring never needs resizing mid-loop.
+        val prerollFrames = prerollFrameCount(PREROLL_MS)
+        val ring = Array(maxOf(prerollFrames, 1)) { ShortArray(frameSamples) }
         var ringHead = 0
         var ringCount = 0
 
@@ -259,13 +277,6 @@ class AudioCaptureLoop(
         try {
             while (running) {
                 val current = params()
-                val wantedPreroll = prerollFrameCount(current.prerollMs)
-                if (wantedPreroll != prerollFrames) {
-                    prerollFrames = wantedPreroll
-                    ring = Array(maxOf(prerollFrames, 1)) { ShortArray(frameSamples) }
-                    ringHead = 0
-                    ringCount = 0
-                }
 
                 val target = if (gateOpen) obtainBuffer() else ring[ringHead]
                 val read = record.read(target, 0, frameSamples)
@@ -309,7 +320,7 @@ class AudioCaptureLoop(
 
                     val quietFor = now - lastLoudAt
                     val segmentFor = now - segmentStartedAt
-                    if (quietFor >= current.hangoverMs || segmentFor >= MAX_SEGMENT_MS) {
+                    if (quietFor >= HANGOVER_MS || segmentFor >= MAX_SEGMENT_MS) {
                         if (segmentFor >= MAX_SEGMENT_MS) {
                             Log.i(TAG, "Segment hit the ${MAX_SEGMENT_MS}ms ceiling — closing gate")
                         }

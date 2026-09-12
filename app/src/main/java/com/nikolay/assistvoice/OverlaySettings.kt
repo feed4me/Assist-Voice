@@ -7,8 +7,8 @@ import android.content.Context
  *
  * Stored in the same preferences file as the VAD settings on purpose: both are
  * live runtime tuning that the service re-reads through one listener, and both
- * must stay out of the slot preferences, where a change means the decode
- * grammar is stale and has to be rebuilt.
+ * must stay out of the slot preferences file, so an ordinary slot edit never
+ * fires this listener and vice versa.
  */
 object OverlaySettings {
 

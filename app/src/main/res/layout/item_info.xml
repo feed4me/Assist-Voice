@@ -44,11 +44,14 @@
             android:textAppearance="@style/TextAppearance.App.Label"
             android:layout_marginBottom="10dp" />
 
-        <!-- Background is set at runtime (bg_status_ok / bg_status_warn) once
-             the accessibility-service state is known; this default keeps the
-             page looking right for the one frame before that first bind. -->
+        <!-- One non-interactive pill for the whole permission state, not one
+             per permission — "Выдать разрешения" below is the only way to
+             act on it. Background/text are set at runtime
+             (bg_status_ok/bg_status_warn — see SlotsAdapter.InfoViewHolder
+             .bind()); this default keeps the page looking right for the one
+             frame before that first bind. -->
         <TextView
-            android:id="@+id/statusText"
+            android:id="@+id/permissionsStatusText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="120dp"
@@ -59,83 +62,21 @@
             android:paddingRight="14dp"
             android:paddingTop="7dp"
             android:paddingBottom="7dp"
-            android:layout_marginBottom="6dp" />
+            android:layout_marginBottom="16dp" />
 
-        <TextView
-            android:id="@+id/micStatusText"
+        <!-- On-device ADB fix for the pill above, for whatever a given
+             firmware blocks the normal on-screen way — see
+             AdbUpdateInstaller.grantPermissions()'s class doc. No status
+             text of its own: a finished attempt just re-enables the button,
+             and whatever it actually fixed shows up as the pill above
+             refreshing on its own. -->
+        <Button
+            android:id="@+id/grantPermissionsButton"
+            style="@style/Widget.App.Button.Outline"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:minWidth="120dp"
-            android:background="@drawable/bg_status_warn"
-            android:textColor="@color/status_warn_text"
-            android:textAppearance="@style/TextAppearance.App.StatusPill"
-            android:paddingLeft="14dp"
-            android:paddingRight="14dp"
-            android:paddingTop="7dp"
-            android:paddingBottom="7dp"
-            android:layout_marginBottom="6dp" />
-
-        <TextView
-            android:id="@+id/contactsStatusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="120dp"
-            android:background="@drawable/bg_status_warn"
-            android:textColor="@color/status_warn_text"
-            android:textAppearance="@style/TextAppearance.App.StatusPill"
-            android:paddingLeft="14dp"
-            android:paddingRight="14dp"
-            android:paddingTop="7dp"
-            android:paddingBottom="7dp"
-            android:layout_marginBottom="6dp" />
-
-        <TextView
-            android:id="@+id/phoneStatusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="120dp"
-            android:background="@drawable/bg_status_warn"
-            android:textColor="@color/status_warn_text"
-            android:textAppearance="@style/TextAppearance.App.StatusPill"
-            android:paddingLeft="14dp"
-            android:paddingRight="14dp"
-            android:paddingTop="7dp"
-            android:paddingBottom="7dp"
-            android:layout_marginBottom="6dp" />
-
-        <TextView
-            android:id="@+id/overlayStatusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="120dp"
-            android:background="@drawable/bg_status_warn"
-            android:textColor="@color/status_warn_text"
-            android:textAppearance="@style/TextAppearance.App.StatusPill"
-            android:paddingLeft="14dp"
-            android:paddingRight="14dp"
-            android:paddingTop="7dp"
-            android:paddingBottom="7dp"
-            android:layout_marginBottom="6dp" />
-
-        <!-- Shown instead of the pills above once every one of them is ok
-             — each pill above is only made visible when its own check is
-             actually failing (see SlotsAdapter.InfoViewHolder.bind()), so
-             once nothing is missing this is the only one left visible. -->
-        <TextView
-            android:id="@+id/allGrantedText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="120dp"
-            android:background="@drawable/bg_status_ok"
-            android:textColor="@color/status_ok_text"
-            android:textAppearance="@style/TextAppearance.App.StatusPill"
-            android:paddingLeft="14dp"
-            android:paddingRight="14dp"
-            android:paddingTop="7dp"
-            android:paddingBottom="7dp"
             android:layout_marginBottom="16dp"
-            android:visibility="gone"
-            android:text="Все разрешения предоставлены" />
+            android:text="Выдать разрешения" />
 
         <LinearLayout
             style="@style/Widget.App.Card"

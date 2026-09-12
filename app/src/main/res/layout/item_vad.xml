@@ -30,7 +30,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textAppearance="@style/TextAppearance.App.Label"
-            android:text="Порог микрофона"
+            android:text="Настройки микрофона"
             android:layout_marginBottom="@dimen/space_s" />
 
         <LinearLayout
@@ -94,36 +94,6 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_s" />
 
-            <TextView
-                android:id="@+id/vadHangoverLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="@dimen/space_m"
-                android:textAppearance="@style/TextAppearance.App.Label"
-                android:text="Хвост" />
-
-            <SeekBar
-                android:id="@+id/vadHangoverSeek"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s" />
-
-            <TextView
-                android:id="@+id/vadPrerollLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="@dimen/space_m"
-                android:textAppearance="@style/TextAppearance.App.Label"
-                android:text="Преролл" />
-
-            <SeekBar
-                android:id="@+id/vadPrerollSeek"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/space_s" />
-
         </LinearLayout>
 
         <LinearLayout
@@ -138,7 +108,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
                 android:textAppearance="@style/TextAppearance.App.Label"
-                android:text="Держать экран после команды" />
+                android:text="Не выключать экран после команды в течение:" />
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -167,6 +137,14 @@
                     android:text="сек (0 — выключено)" />
 
             </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_s"
+                android:textAppearance="@style/TextAppearance.App.Hint"
+                android:text="Работает для команд запуска приложений и звонков" />
 
         </LinearLayout>
 
