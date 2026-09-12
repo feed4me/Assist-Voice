@@ -95,7 +95,8 @@ class MainActivity : AppCompatActivity() {
             onSlotsChanged = { refreshSlots() },
             onSyncPickerData = { syncPickerData() },
             getUpdateStatus = { updateStatus },
-            onUpdateButtonClicked = { onUpdateButtonClicked() }
+            onUpdateButtonClicked = { onUpdateButtonClicked() },
+            onOpenYandexSmartHome = { openYandexSmartHome() }
         )
         pager.adapter = adapter
         // Default RecyclerView change-animation (a cross-fade/translate on
@@ -135,6 +136,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         refreshSlots()
         adapter.refreshInfoPage()
+        adapter.refreshIntegrationsPage()
     }
 
     override fun onDestroy() {
@@ -363,6 +365,23 @@ class MainActivity : AppCompatActivity() {
     /** Reloads the slot list from storage and re-binds the slot-list page. */
     private fun refreshSlots() {
         adapter.submitSlots(TargetAppPrefs.getSlots(this))
+    }
+
+    /**
+     * "Умный дом Яндекса" tile on the Integrations page — first tap starts
+     * the Device Flow QR/code screen, every tap after a successful
+     * authorization goes straight to the hub (devices/groups/disconnect)
+     * instead. onResume() re-checks this every time the person comes back
+     * from either screen, so signing out or a token failure there is
+     * reflected here without any extra plumbing.
+     */
+    private fun openYandexSmartHome() {
+        val intent = if (SmartHomePrefs.isAuthorized(this)) {
+            SmartHomeHubActivity.intent(this)
+        } else {
+            SmartHomeAuthActivity.intent(this)
+        }
+        startActivity(intent)
     }
 
     /**

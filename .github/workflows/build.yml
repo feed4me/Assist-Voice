@@ -58,6 +58,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build debug APK
+        env:
+          YANDEX_CLIENT_ID: ${{ secrets.YANDEX_CLIENT_ID }}
+          YANDEX_CLIENT_SECRET: ${{ secrets.YANDEX_CLIENT_SECRET }}
         run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK artifact

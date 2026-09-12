@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared row for both a device (SmartHomeDeviceListActivity) and a group
+     (SmartHomeGroupListActivity) — rowDeviceBadge shows the readable device
+     type or "Группа", rowDeviceSubtitle shows room/membership + command
+     count. rowOnOffToggle (top-right) is only wired up and made visible for
+     rows whose target actually has an on_off capability — see
+     DeviceRowAdapter/GroupRowAdapter. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/space_s">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- The clickable/ripple surface is this inner LinearLayout, not the
+             Card-styled root — same split as item_slot_row.xml's rowBody, so
+             the ripple stays inside the card's rounded corners. paddingEnd
+             reserves room for rowOnOffToggle so a long device name (which
+             spans the full row width, unlike the short badge) never runs
+             underneath it. -->
+        <LinearLayout
+            android:id="@+id/rowRoot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="?attr/selectableItemBackground"
+            android:paddingEnd="36dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:id="@+id/rowDeviceBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Badge"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/rowDeviceName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:gravity="center"
+                android:textAppearance="@style/TextAppearance.App.RowTitle"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="" />
+
+            <TextView
+                android:id="@+id/rowDeviceSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:gravity="center"
+                android:textAppearance="@style/TextAppearance.App.Hint"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:text="" />
+
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/rowOnOffToggle"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="top|end"
+            android:padding="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_power"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            android:contentDescription="Включить/выключить" />
+
+    </FrameLayout>
+
+</LinearLayout>

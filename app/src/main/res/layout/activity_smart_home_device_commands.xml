@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+<ScrollView
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scrollbars="none"
+    android:clipToPadding="false"
+    android:paddingLeft="@dimen/screen_padding_h"
+    android:paddingRight="@dimen/screen_padding_h"
+    android:paddingTop="@dimen/screen_padding_v"
+    android:paddingBottom="@dimen/screen_padding_v">
+
+    <!-- paddingTop/paddingBottom here (stacking with the ScrollView's own
+         screen_padding_v) give round-bezel clearance on the content's own
+         wrapper. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingTop="@dimen/scroll_bottom_extra"
+        android:paddingBottom="@dimen/scroll_bottom_extra">
+
+        <TextView
+            android:id="@+id/deviceNameText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.App.Label"
+            android:text="" />
+
+        <!-- Always exactly two rows — "Включение" and "Выключение" — never
+             added or removed, only ever edited (see
+             SmartHomeDeviceCommandsActivity's class doc). -->
+        <LinearLayout
+            android:id="@+id/commandRowsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="@dimen/space_m" />
+
+        <LinearLayout
+            style="@style/Widget.App.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_l">
+
+            <TextView
+                android:id="@+id/formTitleText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:textAppearance="@style/TextAppearance.App.Label"
+                android:text="Выбери ВКЛ или ВЫКЛ выше" />
+
+            <EditText
+                android:id="@+id/phraseInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:minHeight="0dp"
+                android:textSize="11sp"
+                android:gravity="center"
+                android:inputType="text"
+                android:singleLine="true"
+                android:hint="например: свет на кухне" />
+
+            <TextView
+                android:id="@+id/phraseHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="@dimen/space_s"
+                android:textAppearance="@style/TextAppearance.App.Hint"
+                android:text="" />
+
+            <!-- One button, not two — every command is structurally either
+                 on or off (see SmartHomeCommand's doc), and which one is
+                 already fixed by the slot selected above (tapped in
+                 commandRowsContainer), so there is nothing left to choose
+                 here. Its colour and label switch to match the selected
+                 slot — see SmartHomeDeviceCommandsActivity.selectSlot(). -->
+            <Button
+                android:id="@+id/saveButton"
+                style="@style/Widget.App.Button.Success"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_m"
+                android:enabled="false"
+                android:text="Сохранить" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+</ScrollView>
+
+    <com.nikolay.assistvoice.CurvedScrollIndicatorView
+        android:id="@+id/scrollIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

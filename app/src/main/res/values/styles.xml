@@ -154,9 +154,20 @@
         <item name="android:textColor">@color/text_primary</item>
     </style>
 
+    <!-- Also doubles as the "off" side of a smart-home command's two fixed
+         save buttons (see Widget.App.Button.Success below for "on") —
+         same red used for a destructive delete reads just as well as a
+         plain, calm "off" state. -->
     <style name="Widget.App.Button.Danger">
         <item name="android:background">@drawable/bg_button_danger</item>
-        <item name="android:textColor">@color/danger</item>
+        <item name="android:textColor">@color/btn_danger_text</item>
+    </style>
+
+    <!-- "On" side of a smart-home command's two fixed save buttons — see
+         SmartHomeDeviceCommandsActivity. -->
+    <style name="Widget.App.Button.Success">
+        <item name="android:background">@drawable/bg_button_success</item>
+        <item name="android:textColor">@color/btn_success_text</item>
     </style>
 
     <!-- ===== Inputs ===== -->

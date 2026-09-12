@@ -1,61 +1,22 @@
 package com.nikolay.assistvoice
 
+import android.content.Context
+
 /**
  * Builds the spoken command phrase for a slot.
  *
  * Every command is deliberately two words: a fixed prefix determined by the
  * action type, then the slot's own word. This is the main defence against
- * false triggers.
- *
- * Why two words works: a grammar-constrained Vosk recognizer is a closed-set
- * classifier — presented with any sound at all, the decoder must pick the
- * nearest entry it knows. With a single-word command, acoustically similar
- * noise lands on it almost every time («але», footsteps). Requiring two
- * specific words *in sequence*, each with a plausible duration, is a far
- * harder target for noise to hit by accident, and costs nothing: Vosk's
- * grammar accepts whole phrases as entries, so the decode graph stays a loop
- * over a handful of alternatives rather than a free word loop.
- *
- * Both prefixes were verified to exist in vosk-model-small-ru-0.22's
- * vocabulary (via vosk_model_find_word). Do not swap them for synonyms
- * casually — «запусти», for one, is NOT in this model and would silently
- * break grammar construction. Known-present alternatives, if ever needed:
- * «открыть», «включи», «позвонить», «набери».
+ * false triggers: Vosk runs full open-vocabulary recognition (see
+ * VoiceAccessibilityService.ensureRecognizer), so nothing constrains what it
+ * can transcribe — the two-word requirement means noise or an unrelated
+ * word has to coincidentally produce both specific words *in sequence* to
+ * match, a far harder accident than matching either word alone.
  */
 object VoicePhrases {
 
     const val PREFIX_LAUNCH_APP = "открой"
     const val PREFIX_CALL = "позвони"
-
-    /**
-     * Extra grammar entries added purely to give the decoder somewhere else to
-     * land, phonetically close to [PREFIX_LAUNCH_APP]/[PREFIX_CALL], when the
-     * audio isn't actually a clean command.
-     *
-     * Without these, a grammar-constrained decoder's only choices for
-     * ambiguous audio are the exact two-word command phrases or the generic
-     * `[unk]` catch-all — and it must pick *something*. Audio that merely
-     * resembles a prefix can snap onto a real command this way, and since
-     * VoiceAccessibilityService checks partial results too, it can do so
-     * before the person has finished saying the second word.
-     *
-     * Entries are morphological siblings or near-rhymes of each prefix, so
-     * they're plausible landing spots for audio that only resembles the real
-     * word. Confirmed present in vosk-model-small-ru-0.22's vocabulary:
-     * «открыть», «позвонить». The rest are not individually re-verified.
-     * VoiceAccessibilityService.ensureRecognizer() tries phrases+decoys first
-     * and falls back cleanly to the plain phrase grammar if construction is
-     * rejected (e.g. because one of these turns out to be absent from the
-     * model), so a wrong guess here degrades gracefully rather than breaking
-     * recognition. Spot-check any addition with WakeWordDictionary.checkPhrase
-     * before relying on it.
-     */
-    val DECOY_WORDS_LAUNCH_APP = listOf(
-        "открыть", "открыл", "открою", "покрой", "закрой", "накрой", "помой"
-    )
-    val DECOY_WORDS_CALL = listOf(
-        "позвонить", "позвонил", "позвоню", "позволь", "похвали", "победи", "догони"
-    )
 
     fun prefixFor(actionType: SlotActionType): String = when (actionType) {
         SlotActionType.LAUNCH_APP -> PREFIX_LAUNCH_APP
@@ -81,29 +42,14 @@ object VoicePhrases {
     /**
      * Unlike a slot phrase, these two are whole fixed commands, not a prefix
      * combined with a user-chosen word — there is no variable part, so they
-     * don't go through phraseFor(). They are folded into every grammar build
-     * unconditionally (see VoiceAccessibilityService.ensureRecognizer), never
-     * exposed as a slot type, and not configurable through any settings
-     * screen.
+     * don't go through phraseFor(). Matched unconditionally in
+     * VoiceAccessibilityService.handleHypothesis(), never exposed as a slot
+     * type, and not configurable through any settings screen.
      */
     const val PHRASE_FLASHLIGHT_ON = "включи фонарик"
     const val PHRASE_FLASHLIGHT_OFF = "выключи фонарик"
 
     val FLASHLIGHT_PHRASES = listOf(PHRASE_FLASHLIGHT_ON, PHRASE_FLASHLIGHT_OFF)
-
-    /**
-     * Decoy for PHRASE_FLASHLIGHT_ON/OFF's fixed second word — same purpose
-     * as DECOY_WORDS_MUSIC below (a landing spot for audio that resembles
-     * "фонарик" without a clearly-heard "включи"/"выключи" in front of it),
-     * kept separate since the flashlight phrases don't share this word with
-     * anything else. "форточка" is a common, everyday word sharing
-     * "фонарик"'s opening sound — on a model this small, an ordinary
-     * high-frequency word is a safer bet to actually be in-vocabulary than
-     * an exact inflected form of the target word itself. Not individually
-     * re-verified — see DECOY_WORDS_MUSIC's doc for the fallback this
-     * relies on.
-     */
-    val DECOY_WORDS_FLASHLIGHT = listOf("фонарика", "фонарики", "фонариком", "форточка")
 
     // ------------------------------------------------------------------
     // YandexMusicWatch playback control — see YandexMusicController.
@@ -111,8 +57,8 @@ object VoicePhrases {
 
     /**
      * Same kind of fixed, non-slot reserved commands as the flashlight
-     * phrases above — folded into every grammar build unconditionally (see
-     * VoiceAccessibilityService.ensureRecognizer), never exposed as a slot
+     * phrases above — matched unconditionally in
+     * VoiceAccessibilityService.handleHypothesis(), never exposed as a slot
      * type or a settings screen.
      */
     const val PHRASE_MUSIC_WAVE = "включи волну"
@@ -134,52 +80,6 @@ object VoicePhrases {
         PHRASE_MUSIC_CONTINUE
     )
 
-    /**
-     * Decoy words for every fixed word in MUSIC_PHRASES — both the
-     * "включи"/"выключи" prefixes (shared with PHRASE_FLASHLIGHT_ON/OFF)
-     * and each phrase's fixed second word. Same purpose as
-     * DECOY_WORDS_LAUNCH_APP/CALL: without these, ambiguous audio that only
-     * resembles one of these words has nowhere cheap to land, so a closed
-     * grammar tends to force it onto a full real command instead (this is
-     * why plain "включи", said alone, used to snap onto "включи фонарик" —
-     * there was no decoy list for this prefix family at all). The prefixes
-     * are included bare, unlike the open/call decoy lists, specifically to
-     * give a truncated "включи"/"выключи" with nothing (or noise) after it
-     * an exact one-word match instead of forcing the decoder to invent a
-     * second word from that noise; the second-word entries cover the
-     * opposite gap — audio that only clearly resembles "волну"/"музыку"/
-     * etc. without a clearly-heard prefix in front of it.
-     *
-     * Not individually re-verified against vosk-model-small-ru-0.22's
-     * vocabulary (see VoicePhrases' class doc) — a wrong guess here just
-     * falls back to the decoy-free grammar, same safety net as the others.
-     * Worth noting: DECOY_WORDS_LAUNCH_APP/CALL/MUSIC/FLASHLIGHT are all
-     * tried together as one combined list (see
-     * VoiceAccessibilityService.ensureRecognizer) — one bad word anywhere
-     * in that combined list drops ALL of them, not just its own phrase's,
-     * so growing this list is a real tradeoff, not a free addition.
-     *
-     * "вода"/"музей"/"чек"/"след"/"приду"/"любовь"/"продавец" are ordinary,
-     * high-frequency words rather than inflected forms of the target words
-     * themselves — on a model this small, a common everyday word sharing
-     * the target's opening/rhyme is a safer bet to actually be
-     * in-vocabulary than an exact but rarer case form. "воспроизведение"
-     * itself gets no decoys: it's long and distinctive enough on its own
-     * that the collision this whole mechanism guards against is far less
-     * likely for it than for a short, common prefix like "включи".
-     */
-    val DECOY_WORDS_MUSIC = listOf(
-        "включи", "включить", "включил", "включу",
-        "выключи", "выключить", "выключил", "выключу",
-        "волна", "волны", "волной", "вода",
-        "музыка", "музыки", "музыкой", "музей",
-        "трека", "треки", "треком", "чек",
-        "следующая", "следующее", "следующего", "след",
-        "предыдущая", "предыдущее", "предыдущего", "приду",
-        "любимый", "любимая", "любимое", "любовь",
-        "продолжи", "продолжить", "продолжил", "продавец"
-    )
-
     // ------------------------------------------------------------------
     // Incoming call answer/decline — see VoiceAccessibilityService's call
     // handling section.
@@ -187,7 +87,7 @@ object VoicePhrases {
 
     /**
      * Same kind of fixed, non-slot reserved commands as the flashlight/music
-     * phrases above — always in the grammar, never a slot type or a settings
+     * phrases above — always matched, never a slot type or a settings
      * screen. Unlike those, the action they trigger is itself gated on a
      * call actually being in the CALL_STATE_RINGING state (see
      * VoiceAccessibilityService.onCallAnswerCommand/onCallDeclineCommand) —
@@ -199,18 +99,48 @@ object VoicePhrases {
 
     val CALL_ACTION_PHRASES = listOf(PHRASE_CALL_ANSWER, PHRASE_CALL_DECLINE)
 
+    // ------------------------------------------------------------------
+    // Smart-home integrations — see SmartHomeCommand/VoiceAccessibilityService's
+    // smart-home cache. Unlike LAUNCH_APP/CALL's prefix (tied to the action
+    // type), each *integration* gets its own start word — "алиса" for
+    // Yandex Smart Home by default, others to follow as more integrations
+    // are added. Editable per-integration (see SmartHomePrefs.getStartWord/
+    // saveStartWord and SmartHomeHubActivity's start-word row), unlike a
+    // slot's wakeWord it has no per-command variant, one word covers every
+    // command of that integration. The rest of the phrase after the verb
+    // (the device/target description, e.g. "свет на кухне") is free text
+    // set by Nikolay per command, same as a slot's wakeWord — but the verb
+    // itself ("включи"/"выключи") is never typed: every command is
+    // structurally one of exactly two states (see SmartHomeCommand's doc),
+    // so the verb is derived from [SmartHomeCommand.value] and always
+    // prepended automatically.
+    // ------------------------------------------------------------------
+
+    /** Default/fallback start word for the Yandex Smart Home integration —
+     * see SmartHomePrefs.getStartWord() for the (possibly user-changed) one
+     * actually in effect. */
+    const val PREFIX_SMART_HOME_YANDEX = "алиса"
+
+    const val VERB_SMART_HOME_ON = "включи"
+    const val VERB_SMART_HOME_OFF = "выключи"
+
+    /** The verb a command's phrase always starts with, right after the
+     * start word — never typed, always derived from [value]. */
+    fun smartHomeVerbFor(value: Boolean): String =
+        if (value) VERB_SMART_HOME_ON else VERB_SMART_HOME_OFF
+
     /**
-     * Same reasoning as DECOY_WORDS_MUSIC: bare prefixes ("прими"/"отклони")
-     * so a truncated command has an exact one-word landing spot, plus
-     * siblings of the shared second word "звонок" (already itself in
-     * CALL_ACTION_PHRASES, so not repeated here) for the opposite gap.
-     * "привет" and "отмени" are common, high-frequency words standing in
-     * for "прими"/"отклони" themselves, same reasoning as "вода"/"музей"/
-     * etc. above. Not individually re-verified — same fallback safety net.
+     * The full phrase for one SmartHomeCommand, e.g. "алиса включи свет на
+     * кухне". Blank when the command has no free-text part configured.
      */
-    val DECOY_WORDS_CALL_ACTION = listOf(
-        "прими", "принять", "принял", "приму", "привет",
-        "отклони", "отклонить", "отклонил", "отклоню", "отмени",
-        "звонки", "звонком", "звоню", "звонкий"
-    )
+    fun smartHomePhraseFor(prefix: String, value: Boolean, freeText: String): String {
+        val text = freeText.trim().lowercase()
+        if (text.isEmpty()) return ""
+        return "$prefix ${smartHomeVerbFor(value)} $text"
+    }
+
+    /** Uses the Yandex integration's current start word — see
+     * SmartHomePrefs.getStartWord() — not always [PREFIX_SMART_HOME_YANDEX]. */
+    fun smartHomeYandexPhraseFor(context: Context, value: Boolean, freeText: String): String =
+        smartHomePhraseFor(SmartHomePrefs.getStartWord(context), value, freeText)
 }

@@ -99,6 +99,33 @@
             android:name=".PickerActivity"
             android:exported="false" />
 
+        <!-- Умный дом Яндекса — Device Flow auth, hub menu, device/group
+             lists, per-target commands (see SmartHomeAuthActivity/
+             SmartHomeHubActivity/SmartHomeDeviceListActivity/
+             SmartHomeGroupListActivity/SmartHomeDeviceCommandsActivity).
+             Only the last one has an EditText, so only it needs adjustPan
+             (same reasoning as SlotEditActivity above). -->
+        <activity
+            android:name=".SmartHomeAuthActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SmartHomeHubActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SmartHomeDeviceListActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SmartHomeGroupListActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".SmartHomeDeviceCommandsActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustPan" />
+
         <!-- Screen "flashlight" — see FlashlightActivity/VoicePhrases. Not
              reachable from any launcher/menu: only VoiceAccessibilityService
              starts it, on the hard-coded "включи фонарик" command.

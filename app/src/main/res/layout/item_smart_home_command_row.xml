@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One of the two fixed on/off slots for a device or group (see
+     SmartHomeDeviceCommandsActivity) — always exactly two of these, never
+     added or removed, only edited. Tapping anywhere loads it into the edit
+     form below. rowCommandBadge's colour (green/red) marks which state this
+     slot is; rowCommandPhrase shows its phrase, or a muted placeholder while
+     still unconfigured. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rowRoot"
+    style="@style/Widget.App.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/space_s"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:id="@+id/rowCommandBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="?attr/selectableItemBackground"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:clickable="true"
+        android:focusable="true">
+
+        <TextView
+            android:id="@+id/rowCommandBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:textAppearance="@style/TextAppearance.App.Badge"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/rowCommandPhrase"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="center"
+            android:textAppearance="@style/TextAppearance.App.RowTitle"
+            android:text="" />
+
+    </LinearLayout>
+
+</LinearLayout>

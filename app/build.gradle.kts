@@ -22,6 +22,22 @@ android {
         // this app actually uses trims the APK and, more usefully on a watch,
         // shrinks the resource table the process keeps in memory.
         resourceConfigurations += listOf("ru", "en")
+
+        // Yandex OAuth client for "Умный дом Яндекса" (see SmartHomeConfig.kt).
+        // Never hardcoded in source — this repo is public, and a client
+        // secret committed to git history stays recoverable forever even
+        // after rotation. Pulled from env vars instead, same pattern as
+        // RELEASE_KEYSTORE_PATH below: empty string locally unless you set
+        // them yourself, populated by GitHub Actions repo secrets in CI (see
+        // build.yml/release.yml).
+        buildConfigField(
+            "String", "YANDEX_CLIENT_ID",
+            "\"${System.getenv("YANDEX_CLIENT_ID") ?: ""}\""
+        )
+        buildConfigField(
+            "String", "YANDEX_CLIENT_SECRET",
+            "\"${System.getenv("YANDEX_CLIENT_SECRET") ?: ""}\""
+        )
     }
 
     // Release builds get signed with a dedicated keystore only when one is

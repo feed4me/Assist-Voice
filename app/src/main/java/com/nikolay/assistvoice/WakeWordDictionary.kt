@@ -17,11 +17,6 @@ import org.vosk.android.StorageService
  * there will never be recognized — so the only honest options are to check, or
  * to let the person configure a command that quietly does nothing forever.
  *
- * The check matters beyond the slot itself: the decode grammar is built
- * *entirely* from these words, so an unknown one doesn't just break its own
- * slot, it makes grammar construction fail and drops the whole recognizer
- * into the slow open-vocabulary fallback.
- *
  * Reading the vocabulary out of the model directly is not an option here:
  * this model ships without `graph/words.txt`, and the FSTs store only numeric
  * ids whose symbol names live in exactly that missing file. `vosk_model_find_word`
@@ -87,10 +82,9 @@ object WakeWordDictionary {
     /**
      * Checks every word of [phrase] (split on whitespace) against the model.
      *
-     * Pass the whole command, prefix included — the prefixes are ordinary
-     * dictionary words and are what the grammar will actually contain, so
-     * checking them here is what makes "the grammar will build" the thing being
-     * verified, rather than just "the person's own word exists".
+     * Pass the whole command, prefix included — an unknown prefix would
+     * silently break the command exactly the same way an unknown free-text
+     * word would, so both need the same check.
      *
      * Blocks on a model load in the worst case, so never call this from the
      * main thread. SlotsAdapter runs it on a background executor.

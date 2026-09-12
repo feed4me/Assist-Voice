@@ -71,17 +71,23 @@ class SlotsAdapter(
     /** Called by the info page's single update button. MainActivity decides
      * what that tap means from the current UpdateStatus — check, download,
      * or re-prompt install — since it's the one holding that state. */
-    private val onUpdateButtonClicked: () -> Unit
+    private val onUpdateButtonClicked: () -> Unit,
+    /** Called by the "Умный дом Яндекса" tile on the Integrations page.
+     * MainActivity decides whether that means launching the Device Flow
+     * auth screen or the device list, since that depends on
+     * SmartHomePrefs.isAuthorized() — not this adapter's concern. */
+    private val onOpenYandexSmartHome: () -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
         private const val TYPE_INFO = 0
         private const val TYPE_SLOT_LIST = 1
-        private const val TYPE_VAD = 2
-        private const val TYPE_ICON = 3
-        private const val TYPE_SUPPORT = 4
+        private const val TYPE_INTEGRATIONS = 2
+        private const val TYPE_VAD = 3
+        private const val TYPE_ICON = 4
+        private const val TYPE_SUPPORT = 5
 
-        private const val PAGE_COUNT = 5
+        private const val PAGE_COUNT = 6
 
         /** How often the VAD page re-reads the live level. */
         private const val VAD_TICK_MS = 150L
@@ -118,6 +124,13 @@ class SlotsAdapter(
         notifyItemChanged(TYPE_INFO)
     }
 
+    /** Call after returning from the Yandex Smart Home auth/device screens —
+     * anything that might have changed the tile's "Подключено"/"Не
+     * подключено" status text. */
+    fun refreshIntegrationsPage() {
+        notifyItemChanged(TYPE_INTEGRATIONS)
+    }
+
     override fun getItemCount(): Int = PAGE_COUNT
 
     override fun getItemViewType(position: Int): Int = position
@@ -127,6 +140,8 @@ class SlotsAdapter(
         return when (viewType) {
             TYPE_INFO -> InfoViewHolder(inflater.inflate(R.layout.item_info, parent, false))
             TYPE_SLOT_LIST -> SlotListViewHolder(inflater.inflate(R.layout.item_slot_list, parent, false))
+            TYPE_INTEGRATIONS ->
+                IntegrationsViewHolder(inflater.inflate(R.layout.item_integrations, parent, false))
             TYPE_VAD -> VadViewHolder(inflater.inflate(R.layout.item_vad, parent, false))
             TYPE_ICON -> IconViewHolder(inflater.inflate(R.layout.item_icon, parent, false))
             else -> SupportViewHolder(inflater.inflate(R.layout.item_support, parent, false))
@@ -137,6 +152,7 @@ class SlotsAdapter(
         when (holder) {
             is InfoViewHolder -> holder.bind(getStatusText(), getUpdateStatus())
             is SlotListViewHolder -> holder.bind(slots)
+            is IntegrationsViewHolder -> holder.bind()
             is VadViewHolder -> holder.bind()
             is IconViewHolder -> holder.bind()
             is SupportViewHolder -> Unit // Static content, nothing to bind.
@@ -368,6 +384,42 @@ class SlotsAdapter(
     }
 
     /**
+     * Third-party service integrations — one tile per service. Only "Умный
+     * дом Яндекса" exists today; a second integration (different service,
+     * likely a completely different auth flow — local network credentials
+     * rather than OAuth, say) just means another tile added here, not a
+     * generic provider abstraction built ahead of having a second real
+     * implementation to generalize from.
+     *
+     * Tapping the tile always calls the same onOpenYandexSmartHome() —
+     * MainActivity decides whether that means the Device Flow auth screen or
+     * the device list, since only it knows SmartHomePrefs.isAuthorized().
+     */
+    inner class IntegrationsViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        // itemView is the FrameLayout wrapper (see item_integrations.xml) —
+        // scrollRoot is the actual ScrollView, a child of it.
+        private val scrollRoot: ScrollView = itemView.findViewById(R.id.scrollRoot)
+        private val yandexTile: View = itemView.findViewById(R.id.yandexSmartHomeTile)
+        private val yandexSubtitle: TextView = itemView.findViewById(R.id.yandexSmartHomeSubtitle)
+
+        init {
+            scrollRoot.enableRotaryScroll()
+            itemView.findViewById<CurvedScrollIndicatorView>(R.id.scrollIndicator).attachTo(scrollRoot)
+            yandexTile.setOnClickListener { onOpenYandexSmartHome() }
+        }
+
+        fun bind() {
+            val context = itemView.context
+            yandexSubtitle.text = if (SmartHomePrefs.isAuthorized(context)) {
+                val targetCount = SmartHomePrefs.getCommands(context).map { it.deviceId }.distinct().size
+                if (targetCount > 0) "Подключено · целей с командами: $targetCount" else "Подключено"
+            } else {
+                "Не подключено — нажми, чтобы авторизоваться"
+            }
+        }
+    }
+
+    /**
      * Microphone gate tuning.
      *
      * The live level readout is the point of this page. The gate uses an
@@ -389,12 +441,7 @@ class SlotsAdapter(
         private val resetPeakButton: Button = itemView.findViewById(R.id.vadResetPeakButton)
 
         private val thresholdSeek: SeekBar = itemView.findViewById(R.id.vadThresholdSeek)
-        private val hangoverSeek: SeekBar = itemView.findViewById(R.id.vadHangoverSeek)
-        private val prerollSeek: SeekBar = itemView.findViewById(R.id.vadPrerollSeek)
-
         private val thresholdLabel: TextView = itemView.findViewById(R.id.vadThresholdLabel)
-        private val hangoverLabel: TextView = itemView.findViewById(R.id.vadHangoverLabel)
-        private val prerollLabel: TextView = itemView.findViewById(R.id.vadPrerollLabel)
 
         private val screenHoldInput: EditText = itemView.findViewById(R.id.screenHoldInput)
 
@@ -402,11 +449,9 @@ class SlotsAdapter(
         private var suppressScreenHoldCallback = false
 
         // SeekBar.min is API 26+ and this app's minSdk allows it, but the
-        // ranges here don't start at zero anyway, so progress is kept as a
+        // range here doesn't start at zero anyway, so progress is kept as a
         // plain step count and converted in one place instead.
         private val thresholdStep = 100
-        private val hangoverStep = 100
-        private val prerollStep = 50
 
         private var ticking = false
 
@@ -424,10 +469,6 @@ class SlotsAdapter(
 
             thresholdSeek.max =
                 (VadSettings.MAX_THRESHOLD_RMS - VadSettings.MIN_THRESHOLD_RMS) / thresholdStep
-            hangoverSeek.max =
-                (VadSettings.MAX_HANGOVER_MS - VadSettings.MIN_HANGOVER_MS) / hangoverStep
-            prerollSeek.max =
-                (VadSettings.MAX_PREROLL_MS - VadSettings.MIN_PREROLL_MS) / prerollStep
 
             resetPeakButton.setOnClickListener { VadMonitor.resetPeak() }
 
@@ -439,20 +480,6 @@ class SlotsAdapter(
                     // setProgress in bind() would fire the service's prefs
                     // listener on every page bind for no reason.
                     if (fromUser) VadSettings.saveThreshold(itemView.context, value)
-                }
-            )
-            hangoverSeek.setOnSeekBarChangeListener(
-                onProgress { progress, fromUser ->
-                    val value = VadSettings.MIN_HANGOVER_MS + progress * hangoverStep
-                    hangoverLabel.text = "Хвост: $value мс"
-                    if (fromUser) VadSettings.saveHangover(itemView.context, value)
-                }
-            )
-            prerollSeek.setOnSeekBarChangeListener(
-                onProgress { progress, fromUser ->
-                    val value = VadSettings.MIN_PREROLL_MS + progress * prerollStep
-                    prerollLabel.text = "Преролл: $value мс"
-                    if (fromUser) VadSettings.savePreroll(itemView.context, value)
                 }
             )
 
@@ -483,17 +510,11 @@ class SlotsAdapter(
             val params = VadSettings.load(itemView.context)
             thresholdSeek.progress =
                 (params.thresholdRms - VadSettings.MIN_THRESHOLD_RMS) / thresholdStep
-            hangoverSeek.progress =
-                (params.hangoverMs - VadSettings.MIN_HANGOVER_MS) / hangoverStep
-            prerollSeek.progress =
-                (params.prerollMs - VadSettings.MIN_PREROLL_MS) / prerollStep
 
             // setProgress doesn't fire the listener when the value is unchanged
-            // (0 on a fresh holder is a common case), so the labels are set
+            // (0 on a fresh holder is a common case), so the label is set
             // explicitly rather than relying on the callback.
             thresholdLabel.text = "Порог: ${params.thresholdRms}"
-            hangoverLabel.text = "Хвост: ${params.hangoverMs} мс"
-            prerollLabel.text = "Преролл: ${params.prerollMs} мс"
 
             suppressScreenHoldCallback = true
             screenHoldInput.setText(params.screenHoldSeconds.toString())
